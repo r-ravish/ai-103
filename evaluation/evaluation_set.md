@@ -1,31 +1,36 @@
 # Evaluation Set — AI-103 Enterprise Knowledge Agent
 
-> **Version**: 1.0.0 · **Author**: Aditya · **Date**: 2025-09-17
+> **Version**: 1.1.0 · **Source of truth**: [`evaluation_set.json`](evaluation_set.json)
+>
+> Human-readable companion to the machine-readable evaluation set. All IDs, questions, and
+> expected facts are derived directly from the pilot corpus in `docs/pilot-documents/`.
+> **Do not add facts here that are not present in the source policy documents.**
 
 ## Overview
 
-This evaluation set contains **15 questions** designed to test the Enterprise Knowledge Agent's retrieval accuracy, reasoning quality, and knowledge-gap detection against the pilot corpus of 5 policy documents (19 indexed chunks).
-
-The machine-readable version of this evaluation set is available in [`evaluation_set.json`](evaluation_set.json).
+This evaluation set contains **15 questions** designed to test the Enterprise Knowledge
+Agent's retrieval accuracy, reasoning quality, and knowledge-gap detection against the pilot
+corpus of 5 policy documents (19 indexed chunks).
 
 ### Category Breakdown
 
 | Category | Count |
 |---|---|
-| Answerable (direct retrieval) | 7 |
+| Answerable (direct retrieval) | 8 |
 | Edge Case (boundary / conditional reasoning) | 4 |
-| Out-of-Scope / Knowledge Gap | 4 |
+| Knowledge Gap (topic absent from corpus) | 2 |
+| Out-of-Scope (outside the policy domain) | 1 |
 | **Total** | **15** |
 
-### Pilot Corpus Documents
+### Pilot Corpus
 
-| Document | ID | Tags |
-|---|---|---|
-| Employee Leave Policy | `DOC-LEAVE-001` | `employee` |
-| Employee Expense Reimbursement Policy | `DOC-REIMB-001` | `employee` |
-| Work From Home Policy | `DOC-WFH-001` | `employee` |
-| Information Technology Security Policy | `DOC-SEC-001` | `it` |
-| Employee Benefits Guide | `DOC-BENEFITS-001` | `employee` |
+| Document | document_id | source_file | permissions_tag |
+|---|---|---|---|
+| Employee Leave Policy | `DOC-LEAVE-001` | `leave-policy.md` | `employee` |
+| Employee Expense Reimbursement Policy | `DOC-REIMB-001` | `reimbursement-policy.md` | `employee` |
+| Work From Home Policy | `DOC-WFH-001` | `work-from-home-policy.md` | `employee` |
+| Information Technology Security Policy | `DOC-SEC-001` | `it-security-policy.md` | `it` |
+| Employee Benefits Guide | `DOC-BENEFITS-001` | `employee-benefits.md` | `employee` |
 
 ---
 
@@ -33,187 +38,221 @@ The machine-readable version of this evaluation set is available in [`evaluation
 
 These questions have clear, verifiable answers present in the pilot corpus.
 
-### EVAL-001 — Annual Leave Entitlement
+### LEAVE-001 — Annual Leave Entitlement
 
 | Field | Value |
 |---|---|
-| **Question** | How many days of paid annual leave do employees get per year? |
-| **Category** | Leave |
-| **Expected Answer** | Employees are entitled to 18 days of paid annual leave per calendar year. |
+| **Question** | How many days of paid annual leave are employees entitled to per calendar year? |
+| **Policy** | Leave |
 | **Source** | `leave-policy.md` — main body |
-| **Expected Behavior** | Direct answer citing leave policy with high confidence. |
+| **Expected Behavior** | Agent returns exact entitlement of 18 days and cites leave-policy.md. |
+| **Expected Facts** | "Employees are entitled to 18 days of paid annual leave per calendar year." |
 
-### EVAL-002 — Leave Request Advance Notice
+---
+
+### LEAVE-002 — Leave Request Advance Notice
 
 | Field | Value |
 |---|---|
-| **Question** | How far in advance should I submit a leave request? |
-| **Category** | Leave |
-| **Expected Answer** | At least 3 working days before the intended start date. |
+| **Question** | How far in advance do I need to submit a leave request? |
+| **Policy** | Leave |
 | **Source** | `leave-policy.md` — main body |
-| **Expected Behavior** | Retrieve the 3-working-day rule and cite leave-policy.md. |
+| **Expected Behavior** | Agent returns the 3-working-day notice requirement, mentions the leave portal, and cites leave-policy.md. |
+| **Expected Facts** | "Leave requests should normally be submitted at least 3 working days before the intended start date." · "Requests are submitted through the employee leave portal and require manager approval." |
 
-### EVAL-003 — Public Holidays vs Annual Leave
+---
+
+### LEAVE-003 — Public Holidays vs Annual Leave
 
 | Field | Value |
 |---|---|
-| **Question** | Do public holidays count against my annual leave balance? |
-| **Category** | Leave |
-| **Expected Answer** | No. Company holidays are separate from annual leave and do not reduce the balance. |
+| **Question** | Do public holidays reduce my annual leave balance? |
+| **Policy** | Leave |
 | **Source** | `leave-policy.md` — Public Holidays |
-| **Expected Behavior** | Clear "no" with explanation, citing the Public Holidays section. |
+| **Expected Behavior** | Agent answers "No", citing the Public Holidays section: company holidays are separate and do not reduce the leave balance. |
+| **Expected Facts** | "Company holidays are separate from annual leave and do not reduce an employee's annual leave balance." |
 
-### EVAL-004 — Reimbursement Submission Deadline
+---
+
+### REIMB-001 — Reimbursement Submission Deadline
 
 | Field | Value |
 |---|---|
-| **Question** | What is the deadline for submitting a reimbursement request? |
-| **Category** | Reimbursement |
-| **Expected Answer** | Within 30 days of the expense date. |
+| **Question** | What is the deadline for submitting a reimbursement request after incurring an expense? |
+| **Policy** | Reimbursement |
 | **Source** | `reimbursement-policy.md` — main body |
-| **Expected Behavior** | Return the 30-day deadline and cite the reimbursement policy. |
+| **Expected Behavior** | Agent returns the 30-day deadline and cites the expense management system, citing reimbursement-policy.md. |
+| **Expected Facts** | "All reimbursement requests must be submitted through the expense management system within 30 days of the expense date." |
 
-### EVAL-006 — WFH Days Per Week
+---
+
+### REIMB-003 — Expense Claim Approval
 
 | Field | Value |
 |---|---|
-| **Question** | How many days per week can I work from home? |
-| **Category** | Work From Home |
-| **Expected Answer** | Up to 3 days per week, subject to team requirements and manager approval. |
-| **Source** | `work-from-home-policy.md` — main body |
-| **Expected Behavior** | Return the 3-day limit and cite work-from-home-policy.md. |
+| **Question** | Who reviews and approves expense claims? |
+| **Policy** | Reimbursement |
+| **Source** | `reimbursement-policy.md` — Approval |
+| **Expected Behavior** | Agent states the employee's manager reviews claims, notes Finance may request additional documentation, and cites the Approval section. |
+| **Expected Facts** | "Expense claims are reviewed by the employee's manager." · "Finance may request additional documentation before approving reimbursement." |
 
-### EVAL-008 — Password Length Requirement
+---
+
+### WFH-001 — WFH Days Per Week
+
+| Field | Value |
+|---|---|
+| **Question** | How many days per week am I allowed to work from home? |
+| **Policy** | Work From Home |
+| **Source** | `work-from-home-policy.md` — main body |
+| **Expected Behavior** | Agent returns the 3-day-per-week limit, notes team requirements and manager approval apply, and cites work-from-home-policy.md. |
+| **Expected Facts** | "Eligible employees may work from home for up to 3 days per week, subject to team requirements and manager approval." |
+
+---
+
+### WFH-003 — Remote Work Equipment
+
+| Field | Value |
+|---|---|
+| **Question** | What equipment can the company provide for remote work? |
+| **Policy** | Work From Home |
+| **Source** | `work-from-home-policy.md` — Equipment |
+| **Expected Behavior** | Agent cites the Equipment section, lists laptops/monitors/keyboards/other equipment, and notes employees are responsible for protecting company equipment. |
+| **Expected Facts** | "The company may provide approved laptops, monitors, keyboards, and other equipment required for remote work." · "Employees are responsible for protecting company equipment from unauthorized access." |
+
+---
+
+### SEC-001 — Minimum Password Length
 
 | Field | Value |
 |---|---|
 | **Question** | What is the minimum password length required by company policy? |
-| **Category** | IT Security |
-| **Expected Answer** | At least 12 characters. |
+| **Policy** | IT Security |
 | **Source** | `it-security-policy.md` — main body |
-| **Expected Behavior** | Return the 12-character requirement and cite the IT security policy. |
-
-### EVAL-009 — Lost Company Device
-
-| Field | Value |
-|---|---|
-| **Question** | What should I do if I lose my company laptop? |
-| **Category** | IT Security |
-| **Expected Answer** | Report it to the IT security team as soon as possible. |
-| **Source** | `it-security-policy.md` — Security Incidents |
-| **Expected Behavior** | Advise reporting to IT security immediately, cite Security Incidents section. |
+| **Expected Behavior** | Agent returns the 12-character minimum and notes the prohibition on easily guessable content, citing the IT Security policy. |
+| **Expected Facts** | "Passwords should contain at least 12 characters." · "Passwords should not contain easily guessable information such as the employee's name, date of birth, or company name." |
 
 ---
 
 ## Edge Case Questions
 
-These questions require the agent to reason beyond simple retrieval — interpreting thresholds, conditional clauses, and ambiguous policy language.
+These questions require reasoning beyond simple retrieval — interpreting thresholds,
+conditional clauses, and ambiguous policy language. The expected facts are grounded in the
+corpus; the interpretation is the agent's task.
 
-### EVAL-005 — Below Receipt Threshold
+### LEAVE-004 — Sick Leave Medical Certificate Boundary
+
+| Field | Value |
+|---|---|
+| **Question** | If I take exactly 3 consecutive days of sick leave, do I need to provide medical documentation? |
+| **Policy** | Leave |
+| **Source** | `leave-policy.md` — Sick Leave |
+| **Expected Behavior** | Agent retrieves the sick leave clause and correctly reads "longer than three consecutive working days" as meaning 4+ days. It must state that exactly 3 days does not trigger the requirement per the policy's literal wording. Agent must not fabricate a documentation requirement for exactly 3 days. |
+| **Corpus Fact** | "For absences longer than three consecutive working days, supporting medical documentation may be required." |
+| **Reasoning Required** | The phrase "longer than three" means ≥ 4 days. An absence of exactly three days does not satisfy this condition as written. |
+| **Why Edge Case** | Boundary-condition test on precise language ("longer than" vs "at least"). |
+
+---
+
+### REIMB-002 — Below Receipt Threshold
 
 | Field | Value |
 |---|---|
 | **Question** | Do I need a receipt for a business expense of INR 500? |
-| **Category** | Reimbursement |
-| **Expected Answer** | The policy requires receipts for expenses above INR 1,000. INR 500 is below that threshold, so a receipt is not explicitly required. |
+| **Policy** | Reimbursement |
 | **Source** | `reimbursement-policy.md` — Required Documentation |
-| **Expected Behavior** | Retrieve the INR 1,000 threshold, apply it correctly, and note receipt is not strictly required. Must NOT hallucinate additional rules. |
-| **Why Edge Case** | Requires boundary-condition reasoning, not just quoting. |
+| **Expected Behavior** | Agent retrieves the INR 1,000 threshold, applies it correctly, and states an itemized receipt is not explicitly required for amounts below INR 1,000. Agent must not hallucinate documentation rules for sub-threshold amounts. |
+| **Corpus Fact** | "Employees must provide an itemized receipt for expenses above INR 1,000." |
+| **Reasoning Required** | The policy specifies the receipt requirement only for amounts above INR 1,000; amounts at or below that threshold are not explicitly addressed by the receipt rule. |
+| **Why Edge Case** | Requires boundary-condition reasoning, not just quoting the rule. |
 
-### EVAL-007 — Custom Working Hours While Remote
+---
+
+### WFH-002 — Custom Working Hours While Remote
 
 | Field | Value |
 |---|---|
 | **Question** | Can I set my own working hours while working remotely? |
-| **Category** | Work From Home |
-| **Expected Answer** | No by default — normal schedule must be maintained — but an alternative may be approved by a manager. |
+| **Policy** | Work From Home |
 | **Source** | `work-from-home-policy.md` — Working Hours |
-| **Expected Behavior** | Convey the default "no" with the manager-approval exception. Must not give a flat yes or no. |
-| **Why Edge Case** | Conditional answer with nuance; tests the agent's ability to handle caveats. |
+| **Expected Behavior** | Agent conveys the default is "no" — normal schedule must be maintained — but notes the manager-approval exception. Must not give a flat yes or flat no without the conditional. |
+| **Expected Facts** | "Employees must maintain their normal working schedule while working remotely." · "An alternative schedule may be used only if it has been approved by the employee's manager." |
+| **Why Edge Case** | Conditional answer (no by default; yes with approval); tests nuance handling. |
 
-### EVAL-010 — Adding Spouse to Health Insurance
+---
+
+### EDGE-001 — Adding Spouse to Health Insurance
 
 | Field | Value |
 |---|---|
 | **Question** | Can I add my spouse to the company health insurance plan? |
-| **Category** | Employee Benefits |
-| **Expected Answer** | The policy mentions eligible dependents can be added during enrollment periods. It does not define who specifically qualifies — employees should check with HR. |
+| **Policy** | Employee Benefits |
 | **Source** | `employee-benefits.md` — Health Insurance |
-| **Expected Behavior** | Cite the dependent enrollment rule but acknowledge the policy does not explicitly define "spouse" as eligible. Recommend consulting HR. |
-| **Why Edge Case** | Vague policy language ("eligible dependents"); tests whether the agent avoids over-interpreting. |
-
-### EVAL-014 — Sick Leave Medical Certificate Boundary
-
-| Field | Value |
-|---|---|
-| **Question** | If I take 3 days of sick leave, do I need to provide a medical certificate? |
-| **Category** | Leave |
-| **Expected Answer** | The policy requires medical documentation for absences "longer than three consecutive working days" — meaning 4+ days. Exactly 3 days does not trigger the requirement. |
-| **Source** | `leave-policy.md` — Sick Leave |
-| **Expected Behavior** | Correctly interpret "longer than three" as 4+, note that exactly 3 does not meet the threshold. Cite leave-policy.md. |
-| **Why Edge Case** | Boundary-condition test on precise wording ("longer than" vs "at least"). |
+| **Expected Behavior** | Agent cites the dependent-enrollment rule from the Health Insurance section but acknowledges the policy does not define which individuals qualify as eligible dependents. Should recommend consulting HR rather than assuming spouse eligibility. Agent must not over-interpret the word "dependent". |
+| **Corpus Fact** | "Eligible dependents can be added during the designated enrollment period or following a qualifying life event." |
+| **Gap Note** | The policy does not define which individuals qualify as eligible dependents. |
+| **Why Edge Case** | Vague policy language; tests whether the agent avoids assuming facts not stated in the corpus. |
 
 ---
 
-## Out-of-Scope / Knowledge-Gap Questions
+## Knowledge-Gap Questions
 
-These questions test the agent's ability to recognize when it lacks sufficient evidence and respond honestly rather than hallucinating.
+These questions test the agent's ability to recognise when the corpus lacks sufficient
+evidence and to respond honestly rather than hallucinating.
 
-### EVAL-011 — VPN Requirement (Knowledge Gap)
+> **Key principle from the ingestion contract:**
+> _"Retrieval alone must not be treated as proof that sufficient evidence exists to answer a question."_
+
+### VPN-001 — VPN Access Request (Canonical Gap)
 
 | Field | Value |
 |---|---|
-| **Question** | Does the company require employees to use a VPN when working remotely? |
-| **Category** | VPN / Knowledge Gap |
-| **Expected Answer** | *(No answer available in corpus)* |
-| **Source** | None — no VPN-specific content exists in the pilot corpus |
-| **Expected Behavior** | Clearly state insufficient information. Must NOT fabricate a VPN policy. |
-| **Why Knowledge Gap** | Canonical gap case from the ingestion contract's pilot validation (Day 1 retrieval test). |
+| **Question** | How do I request VPN access when working remotely? |
+| **Policy** | None (no VPN content in corpus) |
+| **Expected Source** | None |
+| **Expected Behavior** | Agent states the available knowledge base does not contain sufficient information to answer the question. Must NOT invent a VPN procedure, approval process, or technical setup steps. Must NOT cite an unrelated policy document as evidence for VPN requirements. |
+| **Why Knowledge Gap** | Canonical gap case explicitly documented in `docs/ingestion-contract.md` (Pilot Validation section). The pilot corpus contains no VPN-specific content. |
+| **Hallucination Risk** | Semantic retrieval may surface WFH or IT Security chunks as "related". These are relevant but do **not** constitute sufficient evidence to answer the VPN question. |
 
-### EVAL-012 — Maternity / Paternity Leave
+---
+
+### LEAVE-005 — Maternity / Paternity Leave
 
 | Field | Value |
 |---|---|
 | **Question** | What is the company's policy on maternity or paternity leave? |
-| **Category** | Leave / Knowledge Gap |
-| **Expected Answer** | *(No answer available in corpus)* |
-| **Source** | None — leave policy covers only annual, sick, and public holidays |
-| **Expected Behavior** | Indicate that parental leave is not covered. May cite the general leave policy as partially related, but must clearly state the gap. |
-| **Why Knowledge Gap** | Tests within-domain gap detection: the agent has leave knowledge but not for this subtopic. |
+| **Policy** | None (not covered in the Leave policy) |
+| **Expected Source** | None |
+| **Expected Behavior** | Agent indicates the pilot knowledge base does not contain parental leave provisions. May note the Leave policy covers annual leave, sick leave, and public holidays — but must clearly state that maternity/paternity leave is absent from the corpus. Must not fabricate entitlements. |
+| **Why Knowledge Gap** | The Leave policy (`leave-policy.md`) addresses only annual leave, sick leave, and public holidays. No parental leave content exists in the corpus. |
 
-### EVAL-013 — Company Revenue
+---
 
-| Field | Value |
-|---|---|
-| **Question** | What is the company's annual revenue? |
-| **Category** | General / Knowledge Gap |
-| **Expected Answer** | *(No answer available in corpus)* |
-| **Source** | None — entirely outside the HR/policy domain |
-| **Expected Behavior** | Clearly state financial information is not in the knowledge base. Must NOT speculate. |
-| **Why Knowledge Gap** | Completely off-domain. Tests broad out-of-scope detection. |
+## Out-of-Scope Questions
 
-### EVAL-015 — Certification Course Reimbursement (Partial Gap)
+These questions fall entirely outside the enterprise policy domain.
+
+### OOS-001 — Company Annual Revenue
 
 | Field | Value |
 |---|---|
-| **Question** | Can the company reimburse me for a professional certification course? |
-| **Category** | Employee Benefits / Partial Gap |
-| **Expected Answer** | The Benefits Guide mentions reimbursement for approved certifications exists, but specific amounts, eligible certifications, and detailed procedures are not covered. |
-| **Source** | `employee-benefits.md` — Learning and Development (partial) |
-| **Expected Behavior** | Cite Learning & Development section but note the answer is high-level only — specific details are missing from the corpus. |
-| **Why Knowledge Gap** | Partial knowledge scenario: the corpus confirms the benefit exists but lacks actionable detail. |
+| **Question** | What is the company's annual revenue for the last fiscal year? |
+| **Policy** | None (outside policy domain) |
+| **Expected Source** | None |
+| **Expected Behavior** | Agent states financial or business performance information is not available in the enterprise policy knowledge base. Must not speculate or fabricate an answer. Must not cite any policy document as evidence for financial data. |
+| **Why Out-of-Scope** | Completely unrelated to the HR/IT policy corpus. Tests broad out-of-scope detection. |
 
 ---
 
 ## Evaluation Criteria
 
-When scoring agent responses against this evaluation set, assess the following dimensions:
+When scoring agent responses against this evaluation set, assess:
 
 | Dimension | Description |
 |---|---|
 | **Retrieval Accuracy** | Did the agent retrieve the correct source document and section? |
-| **Answer Correctness** | Is the factual content of the answer correct relative to the policy? |
-| **Citation Quality** | Does the agent provide verifiable citations (document ID, source file, chunk)? |
-| **Knowledge-Gap Honesty** | Does the agent clearly state when it lacks information vs. hallucinating? |
+| **Answer Correctness** | Is the factual content of the answer correct relative to the policy text? |
+| **Citation Quality** | Does the agent provide verifiable citations (document_id, source_file)? |
+| **Knowledge-Gap Honesty** | Does the agent clearly state when it lacks information, rather than hallucinating? |
 | **Reasoning Quality** | For edge cases, does the agent apply correct boundary logic and convey nuance? |
-| **Content Safety** | Does the response comply with content safety guidelines (see `content_safety.md`)? |
+| **Content Safety** | Does the response comply with content safety guidelines? (See `content_safety.md`) |
