@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+:root {
+  /* Ink & paper — cool, precise, document-inspired rather than a generic
+     SaaS palette. Reserved for a single accent (the seal) so it reads
+     as deliberate rather than decorative. */
+  --color-ink: #12151b;
+  --color-ink-soft: #3d4149;
+  --color-muted: #6b7078;
+  --color-paper: #ffffff;
+  --color-canvas: #f5f6f8;
+  --color-border: #e3e5e9;
+  --color-border-strong: #cdd0d6;
+
+  /* The "seal" — a verified/grounded accent, used sparingly: send
+     button, focus ring, the small mark that means "this answer is
+     backed by a document." */
+  --color-seal: #1c4b3f;
+  --color-seal-soft: #e8f0ed;
+
+  /* Knowledge-gap accent — distinct from the seal and from error red.
+     An amber flag, not a failure state. */
+  --color-flag: #8a5a12;
+  --color-flag-surface: #fbf3e6;
+  --color-flag-border: #e6c78a;
+
+  --color-user-bubble: var(--color-ink);
+  --color-user-bubble-text: #f5f6f8;
+}
+
+@theme inline {
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-muted: var(--color-muted);
+  --color-paper: var(--color-paper);
+  --color-canvas: var(--color-canvas);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+  --color-seal: var(--color-seal);
+  --color-seal-soft: var(--color-seal-soft);
+  --color-flag: var(--color-flag);
+  --color-flag-surface: var(--color-flag-surface);
+  --color-flag-border: var(--color-flag-border);
+  --color-user-bubble: var(--color-user-bubble);
+  --color-user-bubble-text: var(--color-user-bubble-text);
+  --font-serif: var(--font-stack-serif);
+  --font-sans: var(--font-stack-sans);
+}
+
+html {
+  --font-stack-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif;
+  --font-stack-serif: "Iowan Old Style", "Palatino Linotype", "URW Palladio L",
+    P052, serif;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-stack-sans);
+}
+
+/* A faint dot grid on the message canvas — texture, not decoration.
+   Kept low-contrast so it never competes with content. */
+.canvas-texture {
+  background-image: radial-gradient(
+    var(--color-border-strong) 1px,
+    transparent 1px
+  );
+  background-size: 22px 22px;
+  background-position: -8px -8px;
+}
+
+/* Visible keyboard focus, independent of color alone. */
+:focus-visible {
+  outline: 2px solid var(--color-seal);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
