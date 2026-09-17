@@ -1,0 +1,16 @@
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Enterprise Knowledge Agent",
+  description:
+    "Ask questions about company policies and internal knowledge, with grounded answers and citations.",
+};
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html lang="en" className="h-full antialiased">
+      <body className="min-h-full h-full flex flex-col">{children}</body>
+    </html>
+  );
+}
