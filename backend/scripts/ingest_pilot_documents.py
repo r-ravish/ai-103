@@ -16,7 +16,7 @@ INDEX_NAME = "enterprise-knowledge-index"
 AOAI_ENDPOINT = os.environ["AZURE_OPENAI_ENDPOINT"]
 AOAI_API_KEY = os.environ["AZURE_OPENAI_API_KEY"]
 AOAI_API_VERSION = os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21")
-AOAI_EMBEDDING_DEPLOYMENT = os.environ["AZURE_OPENAI_DEPLOYMENT"]
+AOAI_EMBEDDING_DEPLOYMENT = os.environ["AZURE_OPENAI_EMBEDDING_DEPLOYMENT"]
 
 DOCS_DIR = Path(os.environ.get("PILOT_DOCS_DIR", "docs/pilot-documents"))
 MAX_TOKENS = 500
@@ -24,12 +24,22 @@ OVERLAP_TOKENS = 60
 EMBED_BATCH_SIZE = 16
 UPLOAD_BATCH_SIZE = 100
 
-# Per-file overrides — adjust as you add more pilot docs
+# Per-file metadata — document_type and permission_tags for every pilot doc.
+# These are not read from frontmatter (see docs/ingestion-contract.md).
+# Add new entries here when new documents are introduced.
 DOCUMENT_TYPE_MAP = {
     "employee-benefits.md": "policy",
+    "leave-policy.md": "policy",
+    "reimbursement-policy.md": "policy",
+    "work-from-home-policy.md": "policy",
+    "it-security-policy.md": "policy",
 }
 PERMISSION_TAGS_MAP = {
     "employee-benefits.md": ["all-employees"],
+    "leave-policy.md": ["all-employees"],
+    "reimbursement-policy.md": ["all-employees"],
+    "work-from-home-policy.md": ["all-employees"],
+    "it-security-policy.md": ["all-employees", "it"],
 }
 
 FRONTMATTER_PATTERN = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
