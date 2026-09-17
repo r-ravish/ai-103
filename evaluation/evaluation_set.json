@@ -1,0 +1,221 @@
+{
+  "evaluation_set": {
+    "version": "1.0.0",
+    "created": "2025-09-17",
+    "author": "Aditya",
+    "description": "Evaluation set for the AI-103 Enterprise Knowledge Agent pilot. Contains 15 questions spanning answerable, edge-case, and out-of-scope / knowledge-gap categories against the 5 pilot policy documents.",
+    "pilot_corpus": [
+      "docs/pilot-documents/leave-policy.md",
+      "docs/pilot-documents/reimbursement-policy.md",
+      "docs/pilot-documents/work-from-home-policy.md",
+      "docs/pilot-documents/it-security-policy.md",
+      "docs/pilot-documents/employee-benefits.md"
+    ],
+    "total_questions": 15,
+    "category_breakdown": {
+      "answerable": 7,
+      "edge_case": 4,
+      "out_of_scope_knowledge_gap": 4
+    }
+  },
+  "questions": [
+    {
+      "id": "EVAL-001",
+      "question": "How many days of paid annual leave do employees get per year?",
+      "category": "leave",
+      "type": "answerable",
+      "expected_answer": "Employees are entitled to 18 days of paid annual leave per calendar year.",
+      "expected_source": {
+        "document_id": "DOC-LEAVE-001",
+        "source_file": "leave-policy.md",
+        "relevant_section": "Employee Leave Policy (main body)"
+      },
+      "expected_behavior": "Agent should return a direct answer citing the leave policy document with high confidence.",
+      "rationale": "Straightforward factual retrieval — the exact number (18 days) appears verbatim in the corpus."
+    },
+    {
+      "id": "EVAL-002",
+      "question": "How far in advance should I submit a leave request?",
+      "category": "leave",
+      "type": "answerable",
+      "expected_answer": "Leave requests should normally be submitted at least 3 working days before the intended start date.",
+      "expected_source": {
+        "document_id": "DOC-LEAVE-001",
+        "source_file": "leave-policy.md",
+        "relevant_section": "Employee Leave Policy (main body)"
+      },
+      "expected_behavior": "Agent should retrieve the 3-working-day advance notice requirement and cite leave-policy.md.",
+      "rationale": "Tests retrieval of a specific procedural detail from the leave policy."
+    },
+    {
+      "id": "EVAL-003",
+      "question": "Do public holidays count against my annual leave balance?",
+      "category": "leave",
+      "type": "answerable",
+      "expected_answer": "No. Company holidays are separate from annual leave and do not reduce an employee's annual leave balance.",
+      "expected_source": {
+        "document_id": "DOC-LEAVE-001",
+        "source_file": "leave-policy.md",
+        "relevant_section": "Public Holidays"
+      },
+      "expected_behavior": "Agent should clearly state that public holidays do not reduce annual leave and cite the Public Holidays section.",
+      "rationale": "Tests retrieval from a specific sub-section (Public Holidays) within the leave policy."
+    },
+    {
+      "id": "EVAL-004",
+      "question": "What is the deadline for submitting a reimbursement request?",
+      "category": "reimbursement",
+      "type": "answerable",
+      "expected_answer": "All reimbursement requests must be submitted through the expense management system within 30 days of the expense date.",
+      "expected_source": {
+        "document_id": "DOC-REIMB-001",
+        "source_file": "reimbursement-policy.md",
+        "relevant_section": "Employee Expense Reimbursement Policy (main body)"
+      },
+      "expected_behavior": "Agent should return the 30-day deadline and cite reimbursement-policy.md.",
+      "rationale": "Direct factual lookup of a numeric deadline from the reimbursement policy."
+    },
+    {
+      "id": "EVAL-005",
+      "question": "Do I need a receipt for a business expense of INR 500?",
+      "category": "reimbursement",
+      "type": "edge_case",
+      "expected_answer": "The policy requires an itemized receipt for expenses above INR 1,000. Since INR 500 is below that threshold, a receipt is not explicitly required — but the agent should note that general documentation practices may still apply.",
+      "expected_source": {
+        "document_id": "DOC-REIMB-001",
+        "source_file": "reimbursement-policy.md",
+        "relevant_section": "Required Documentation"
+      },
+      "expected_behavior": "Agent should retrieve the INR 1,000 receipt threshold, correctly reason that INR 500 is below it, and note the receipt is not strictly required per policy. Should NOT hallucinate additional rules.",
+      "rationale": "Edge case requiring the agent to apply a boundary condition (below threshold) rather than just quoting the rule. Tests reasoning, not just retrieval."
+    },
+    {
+      "id": "EVAL-006",
+      "question": "How many days per week can I work from home?",
+      "category": "work_from_home",
+      "type": "answerable",
+      "expected_answer": "Eligible employees may work from home for up to 3 days per week, subject to team requirements and manager approval.",
+      "expected_source": {
+        "document_id": "DOC-WFH-001",
+        "source_file": "work-from-home-policy.md",
+        "relevant_section": "Work From Home Policy (main body)"
+      },
+      "expected_behavior": "Agent should return the 3-day limit and cite work-from-home-policy.md.",
+      "rationale": "Straightforward factual retrieval from the WFH policy."
+    },
+    {
+      "id": "EVAL-007",
+      "question": "Can I set my own working hours while working remotely?",
+      "category": "work_from_home",
+      "type": "edge_case",
+      "expected_answer": "Employees must maintain their normal working schedule while working remotely unless an alternative schedule has been approved by their manager.",
+      "expected_source": {
+        "document_id": "DOC-WFH-001",
+        "source_file": "work-from-home-policy.md",
+        "relevant_section": "Working Hours"
+      },
+      "expected_behavior": "Agent should correctly convey that the default is no — normal schedule must be maintained — but note the manager-approval exception. Should not give a flat yes or no.",
+      "rationale": "Edge case with a conditional answer: 'no by default, but yes with manager approval'. Tests the agent's ability to convey nuance."
+    },
+    {
+      "id": "EVAL-008",
+      "question": "What is the minimum password length required by company policy?",
+      "category": "it_security",
+      "type": "answerable",
+      "expected_answer": "Passwords should contain at least 12 characters.",
+      "expected_source": {
+        "document_id": "DOC-SEC-001",
+        "source_file": "it-security-policy.md",
+        "relevant_section": "Information Technology Security Policy (main body)"
+      },
+      "expected_behavior": "Agent should return the 12-character requirement and cite it-security-policy.md.",
+      "rationale": "Direct factual retrieval from the IT security policy."
+    },
+    {
+      "id": "EVAL-009",
+      "question": "What should I do if I lose my company laptop?",
+      "category": "it_security",
+      "type": "answerable",
+      "expected_answer": "Lost company devices must be reported to the IT security team as soon as possible.",
+      "expected_source": {
+        "document_id": "DOC-SEC-001",
+        "source_file": "it-security-policy.md",
+        "relevant_section": "Security Incidents"
+      },
+      "expected_behavior": "Agent should advise reporting to the IT security team immediately and cite the Security Incidents section.",
+      "rationale": "Tests retrieval from the Security Incidents section; the question is phrased differently from the policy text, testing semantic matching."
+    },
+    {
+      "id": "EVAL-010",
+      "question": "Can I add my spouse to the company health insurance plan?",
+      "category": "employee_benefits",
+      "type": "edge_case",
+      "expected_answer": "Eligible dependents can be added during the designated enrollment period or following a qualifying life event. The policy does not explicitly define who qualifies as a 'dependent' — the employee should check with HR for specific eligibility rules.",
+      "expected_source": {
+        "document_id": "DOC-BENEFITS-001",
+        "source_file": "employee-benefits.md",
+        "relevant_section": "Health Insurance"
+      },
+      "expected_behavior": "Agent should cite the dependent enrollment rule but acknowledge that the policy does not specifically define 'spouse' as an eligible dependent — it should recommend consulting HR rather than making assumptions.",
+      "rationale": "Edge case: the policy mentions 'eligible dependents' but does not enumerate them. Tests whether the agent avoids over-interpreting vague policy language."
+    },
+    {
+      "id": "EVAL-011",
+      "question": "Does the company require employees to use a VPN when working remotely?",
+      "category": "vpn",
+      "type": "out_of_scope",
+      "expected_answer": null,
+      "expected_source": null,
+      "expected_behavior": "Agent should clearly state that it could not find sufficient information about VPN requirements in the available knowledge base. Must NOT fabricate a VPN policy. This is the canonical knowledge-gap test case from the ingestion contract's pilot validation.",
+      "rationale": "Explicitly documented knowledge-gap case (ingestion-contract.md, 'Pilot validation'). The corpus has no VPN-specific content. Tests that the agent surfaces knowledge gaps rather than hallucinating."
+    },
+    {
+      "id": "EVAL-012",
+      "question": "What is the company's policy on maternity or paternity leave?",
+      "category": "leave",
+      "type": "out_of_scope",
+      "expected_answer": null,
+      "expected_source": null,
+      "expected_behavior": "Agent should indicate that the pilot knowledge base does not contain specific information about maternity or paternity leave. May cite the general leave policy as partially related, but must clearly state the gap.",
+      "rationale": "The leave policy only covers annual leave, sick leave, and public holidays. No parental leave provisions exist in the corpus. Tests out-of-scope detection within a domain the agent does have some knowledge of."
+    },
+    {
+      "id": "EVAL-013",
+      "question": "What is the company's annual revenue?",
+      "category": "general",
+      "type": "out_of_scope",
+      "expected_answer": null,
+      "expected_source": null,
+      "expected_behavior": "Agent should clearly state that financial information is not available in the knowledge base. Must NOT attempt to answer or speculate.",
+      "rationale": "Completely unrelated to the HR/policy corpus. Tests whether the agent correctly identifies topics that are entirely outside the domain."
+    },
+    {
+      "id": "EVAL-014",
+      "question": "If I take 3 days of sick leave, do I need to provide a medical certificate?",
+      "category": "leave",
+      "type": "edge_case",
+      "expected_answer": "For absences longer than three consecutive working days, supporting medical documentation may be required. Since 3 days is exactly at the boundary (not 'longer than'), a certificate is not strictly required — but the agent should note the policy wording and advise caution.",
+      "expected_source": {
+        "document_id": "DOC-LEAVE-001",
+        "source_file": "leave-policy.md",
+        "relevant_section": "Sick Leave"
+      },
+      "expected_behavior": "Agent should retrieve the sick leave policy, correctly interpret 'longer than three consecutive working days' as meaning 4+ days, and note that exactly 3 days does not trigger the requirement. Should cite leave-policy.md.",
+      "rationale": "Boundary-condition edge case: the policy says 'longer than three' — exactly three does not meet the threshold. Tests precise language interpretation."
+    },
+    {
+      "id": "EVAL-015",
+      "question": "Can the company reimburse me for a professional certification course?",
+      "category": "employee_benefits",
+      "type": "out_of_scope",
+      "expected_answer": "The Employee Benefits Guide mentions that employees may request reimbursement for approved professional courses, certifications, conferences, and training programs related to their role. However, specific details on certification reimbursement amounts and approval processes are not covered in the pilot corpus.",
+      "expected_source": {
+        "document_id": "DOC-BENEFITS-001",
+        "source_file": "employee-benefits.md",
+        "relevant_section": "Learning and Development"
+      },
+      "expected_behavior": "Agent should cite the Learning and Development section but note that it only provides high-level guidance — specific amounts, eligible certifications, and detailed procedures are not in the corpus. Partial answer with acknowledged gap.",
+      "rationale": "Tests a 'partial knowledge' scenario: the corpus mentions certification reimbursement exists but lacks actionable detail. The agent should answer with appropriate caveats."
+    }
+  ]
+}
