@@ -5,10 +5,18 @@ Endpoints:
   GET  /health  – liveness check
   POST /chat    – ask the persisted Foundry agent a question; returns a
                   grounded answer with citation metadata.
+                  Both the user question and the agent answer are screened
+                  by Azure AI Content Safety before any data leaves this
+                  service (when credentials are configured).
 
 Run locally:
     cd backend
     uvicorn app.main:app --reload
+
+Content Safety configuration (optional — see backend/.env.example):
+    AZURE_CONTENT_SAFETY_ENDPOINT           — enables live screening
+    AZURE_CONTENT_SAFETY_API_KEY            — API key (never commit)
+    AZURE_CONTENT_SAFETY_SEVERITY_THRESHOLD — default 2 (Low/strict)
 """
 from __future__ import annotations
 
@@ -19,20 +27,25 @@ from typing import AsyncGenerator
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from app.content_safety import ContentSafetyClient
 from app.foundry_agent import FoundryAgentService
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Service instance — created once at startup, released at shutdown.
+# Service instances — created once at startup, released at shutdown.
 # ---------------------------------------------------------------------------
 foundry_service: FoundryAgentService | None = None
+content_safety_client: ContentSafetyClient | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Initialise shared resources on startup; release them on shutdown."""
-    global foundry_service
+    global foundry_service, content_safety_client
+
+    logger.info("Startup: initialising ContentSafetyClient")
+    content_safety_client = ContentSafetyClient()
 
     logger.info("Startup: initialising FoundryAgentService")
     foundry_service = FoundryAgentService()
@@ -43,6 +56,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.info("Shutdown: closing FoundryAgentService")
         foundry_service.close()
         foundry_service = None
+
+    content_safety_client = None
+    logger.info("Shutdown: ContentSafetyClient released")
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +115,8 @@ class ChatResponse(BaseModel):
 @app.get("/health", tags=["ops"])
 def health() -> dict[str, str]:
     """Liveness check — returns 200 OK when the server is running."""
-    return {"status": "ok"}
+    cs_mode = "live" if (content_safety_client and content_safety_client.is_live) else "passthrough"
+    return {"status": "ok", "content_safety": cs_mode}
 
 
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
@@ -109,6 +126,12 @@ def chat(request: ChatRequest) -> ChatResponse:
 
     The agent searches the Azure AI Search knowledge base and synthesises a
     grounded answer. Source-document citations are included in the response.
+
+    Content Safety screening:
+      1. User input is screened before being sent to Foundry.
+         Blocked inputs receive a 400 response with a safe refusal message.
+      2. The agent's answer is screened before being returned to the user.
+         Blocked outputs are replaced with a safe refusal message.
     """
     if foundry_service is None:
         raise HTTPException(
@@ -116,17 +139,42 @@ def chat(request: ChatRequest) -> ChatResponse:
             detail="Foundry agent service is not initialised.",
         )
 
+    # ── Step 1: Screen the user's input ─────────────────────────────────────
+    if content_safety_client is not None:
+        input_result = content_safety_client.screen_text(request.question)
+        if input_result.blocked:
+            logger.warning(
+                "Content Safety blocked user input: %s", input_result.reason
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=input_result.safe_response,
+            )
+
+    # ── Step 2: Call the Foundry agent ───────────────────────────────────────
     try:
         result = foundry_service.ask(request.question)
-
-        return ChatResponse(
-            answer=result["answer"],
-            citations=[Citation(**c) for c in result.get("citations", [])],
-        )
-
     except Exception as exc:
         logger.exception("Error calling Foundry agent")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to process chat request: {exc}",
         ) from exc
+
+    # ── Step 3: Screen the agent's output ────────────────────────────────────
+    if content_safety_client is not None:
+        output_result = content_safety_client.screen_text(result["answer"])
+        if output_result.blocked:
+            logger.warning(
+                "Content Safety blocked agent output: %s", output_result.reason
+            )
+            # Return the safe refusal message; suppress the raw LLM output.
+            return ChatResponse(
+                answer=output_result.safe_response,
+                citations=[],
+            )
+
+    return ChatResponse(
+        answer=result["answer"],
+        citations=[Citation(**c) for c in result.get("citations", [])],
+    )

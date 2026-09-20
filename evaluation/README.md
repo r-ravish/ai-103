@@ -9,6 +9,8 @@ Evaluation module for the AI-103 Enterprise Knowledge Agent.
 | [`evaluation_set.json`](evaluation_set.json) | Machine-readable evaluation set (15 questions) — primary source of truth for automated testing |
 | [`evaluation_set.md`](evaluation_set.md) | Human-readable companion; derived from the JSON and the pilot policy documents |
 | [`content_safety.md`](content_safety.md) | Content safety preparation notes, test scenarios, and Azure AI Content Safety integration guidance |
+| [`run_eval.py`](run_eval.py) | **Day 3 evaluation script skeleton** — sends questions to `POST /chat`, captures answers and citations, writes JSONL results |
+| [`results/`](results/) | Run output directory (git-ignored `*.jsonl` files; `.gitkeep` preserves the folder) |
 
 ## Question Categories
 
@@ -55,3 +57,77 @@ Content safety preparation covers 12 test scenarios (CS-001 through CS-012) acro
 
 See [`content_safety.md`](content_safety.md) for Azure AI Content Safety integration notes,
 configuration guidance, and safe refusal templates.
+
+---
+
+## Running the Evaluation Script
+
+### Prerequisites
+
+- Python 3.10+ (standard library only — no extra packages required)
+- Backend server running at `http://localhost:8000` **or** set `CHAT_API_URL`
+
+### Dry-run (no API needed)
+
+Validates the evaluation set loads correctly and lists all questions:
+
+```bash
+python evaluation/run_eval.py --dry-run
+```
+
+### Full run against local backend
+
+Start the backend first:
+
+```bash
+cd backend
+uvicorn app.main:app --reload
+```
+
+Then in a second terminal:
+
+```bash
+python evaluation/run_eval.py
+```
+
+### Run against the deployed backend (Day 3+)
+
+```bash
+python evaluation/run_eval.py --api-url https://<backend-host>/chat
+# or
+CHAT_API_URL=https://<backend-host>/chat python evaluation/run_eval.py
+```
+
+### Filter by category
+
+```bash
+python evaluation/run_eval.py --category answerable
+python evaluation/run_eval.py --category edge_case
+```
+
+### Output
+
+Results are written to `evaluation/results/run_<YYYYMMDD_HHMMSS>.jsonl`
+(one JSON object per line, one line per question).
+
+Each record contains:
+
+| Field | Type | Notes |
+|---|---|---|
+| `run_id` | `string` | e.g. `run_20260920_160000` |
+| `question_id` | `string` | e.g. `LEAVE-001` |
+| `category` | `string` | `answerable` / `edge_case` / `knowledge_gap` / `out_of_scope` |
+| `question` | `string` | The question sent to the API |
+| `expected_facts` | `list[str]` | Ground-truth facts from `evaluation_set.json` |
+| `http_status` | `int \| null` | HTTP response code; `null` on network error |
+| `latency_ms` | `float` | End-to-end request latency |
+| `answer` | `string` | Agent's answer |
+| `citations` | `list[dict]` | `document_id`, `title`, `source_file` |
+| `error` | `string \| null` | Error description on failure |
+| `correctness_score` | `null` | **Placeholder** — filled by grading script (Day 3+) |
+| `grounding_score` | `null` | **Placeholder** — filled by grading script (Day 3+) |
+| `notes` | `string` | Free-text for manual reviewer |
+
+> **Note:** `correctness_score` and `grounding_score` are `null` in this
+> skeleton. They will be populated by a subsequent grading step once the
+> live backend is connected on Day 3.
