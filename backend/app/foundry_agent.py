@@ -51,6 +51,65 @@ class FoundryAgentService:
         )
         self._client = self._project.get_openai_client(agent_name=_AGENT_NAME)
 
+    @staticmethod
+    def _detect_knowledge_gap(answer: str) -> tuple[bool, str | None]:
+        """Detect knowledge gaps and clearly out-of-scope responses."""
+
+        normalized = " ".join(answer.lower().split())
+
+        out_of_scope_markers = (
+            "outside the scope",
+            "outside the scope of",
+            "out of scope",
+            "not related to company policies",
+            "not related to company policy",
+            "not related to the company",
+            "outside the company policy knowledge base",
+            "outside the knowledge base",
+            "not something i can help with",
+        )
+
+        knowledge_gap_markers = (
+            "not available in the knowledge base",
+            "not available in the current knowledge base",
+            "not available in the knowledge base documents",
+            "not available in the current knowledge base documents",
+            "not found in the knowledge base",
+            "cannot find that information in the knowledge base",
+            "can't find that information in the knowledge base",
+            "not documented in the knowledge base",
+            "not documented in the available documents",
+            "not explicitly documented",
+            "not currently documented",
+            "does not contain sufficient information",
+            "do not contain sufficient information",
+            "does not contain the information",
+            "do not contain the information",
+            "does not contain specific",
+            "do not contain specific",
+            "does not contain a specific",
+            "do not contain a specific",
+            "does not contain",
+            "do not contain",
+            "no information on",
+            "no information about",
+            "information is not available",
+            "i don't have enough information",
+            "i do not have enough information",
+            "i don't have that information",
+            "i do not have that information",
+            "i can't find",
+            "i cannot find",
+        )
+
+        if any(marker in normalized for marker in out_of_scope_markers):
+            return True, "out_of_scope"
+
+        if any(marker in normalized for marker in knowledge_gap_markers):
+            return True, "knowledge_gap"
+
+        return False, None
+
     def ask(self, question: str) -> dict[str, Any]:
         """
         Send *question* to the Foundry agent and return a structured reply.
@@ -70,6 +129,17 @@ class FoundryAgentService:
         # two known support-ticket tools and re-submit so the agent can finish.
         response = self._approve_mcp_requests(response)
 
+        for item in response.output:
+            if getattr(item, "type", None) == "mcp_call":
+                if getattr(item, "name", None) == "knowledge_base_retrieve":
+                    logger.info(
+                        "RETRIEVAL RAW OUTPUT: %s",
+                        getattr(item, "output", None),
+                    )
+
+        # Capture any MCP action that occurred during this request.
+        action_taken, action_type, ticket_id = self._extract_tool_action(response)
+
         raw_answer = response.output_text or ""
         # Strip inline citation markers like 【4:0†work-from-home-policy.md】
         # so the frontend receives clean prose and uses the structured
@@ -86,28 +156,83 @@ class FoundryAgentService:
         # suppress citations in that case, so the frontend never shows
         # misleading source references alongside a "not found" reply.
         # ------------------------------------------------------------------
-        _GAP_MARKERS = (
-            "does not contain a specific",
-            "does not currently contain",
-            "does not contain sufficient information",
-            "no specific",
-            "not documented",
-            "not explicitly documented",
-            "no information",
-            "cannot find",
-            "not available in",
-        )
-
-        is_knowledge_gap = any(marker in answer.lower() for marker in _GAP_MARKERS)
+        is_knowledge_gap, gap_reason = self._detect_knowledge_gap(answer)
 
         if is_knowledge_gap:
             logger.info("Knowledge gap detected — suppressing citations.")
             citations: list[dict[str, Any]] = []
+            escalation_required = True
+            escalation_reason = gap_reason
+
+            # ── Trigger automatic MCP escalation ──────────────────────────
+            # Instruct the persisted agent to call create_support_ticket so
+            # the gap is tracked without requiring any manual intervention.
+            escalation_instruction = (
+                "The user's question could not be answered reliably from the "
+                "knowledge base. You must now escalate this request by calling "
+                "the `create_support_ticket` MCP tool. "
+                "Do not guess or invent an answer. "
+                "Create a medium-priority ticket with the title "
+                "'Knowledge gap escalation' and use the original user question "
+                f"as the ticket description: {question!r}. "
+                "After the tool succeeds, provide a brief confirmation."
+            )
+
+            logger.info("Triggering MCP escalation for knowledge gap.")
+            escalation_response = self._client.responses.create(
+                previous_response_id=response.id,
+                input=escalation_instruction,
+            )
+
+            # Approve only the whitelisted create_support_ticket call.
+            escalation_response = self._approve_mcp_requests(escalation_response)
+
+            _, _, escalation_ticket_id = self._extract_tool_action(
+                escalation_response
+            )
+            ticket_id = escalation_ticket_id
+
+            if ticket_id:
+                logger.info("Escalation ticket created: %s", ticket_id)
+
+                action_taken = True
+                action_type = "escalation"
+            else:
+                logger.error(
+                    "Escalation was required, but the escalation ticket could not be created."
+                )
+
+                action_taken = False
+                action_type = "escalation_failed"
+
+                answer = (
+                    "I don't have enough information to answer this reliably, "
+                    "and I was unable to create the escalation ticket right now. "
+                    "Please contact HR or your manager directly for assistance."
+                )
+
         else:
             citations = self._extract_citations(response)
+            escalation_required = False
+            escalation_reason = None
 
-        logger.info("Agent replied (%d chars, %d citations)", len(answer), len(citations))
-        return {"answer": answer, "citations": citations, "response_id": response.id}
+        logger.info(
+            "Agent replied (%d chars, %d citations, escalation_required=%s, action_taken=%s)",
+            len(answer),
+            len(citations),
+            escalation_required,
+            action_taken,
+        )
+        return {
+            "answer": answer,
+            "citations": citations,
+            "response_id": response.id,
+            "escalation_required": escalation_required,
+            "escalation_reason": escalation_reason,
+            "action_taken": action_taken,
+            "action_type": action_type,
+            "ticket_id": ticket_id,
+        }
 
     def _approve_mcp_requests(self, response: Any) -> Any:
         """
@@ -176,6 +301,52 @@ class FoundryAgentService:
             previous_response_id=response.id,
             input=approval_inputs,
         )
+
+    @staticmethod
+    def _extract_tool_action(response: Any) -> tuple[bool, str | None, str | None]:
+        """
+        Extract structured action metadata from MCP tool calls.
+
+        Returns (action_taken, action_type, ticket_id).
+        """
+        try:
+            raw: dict[str, Any] = response.model_dump()
+        except Exception:
+            logger.warning(
+                "Could not serialise response while extracting tool action.",
+                exc_info=True,
+            )
+            return False, None, None
+
+        action_taken = False
+        action_type: str | None = None
+        ticket_id: str | None = None
+
+        for item in raw.get("output", []):
+            if item.get("type") != "mcp_call":
+                continue
+
+            tool_name = item.get("name")
+
+            if tool_name == "create_support_ticket":
+                action_taken = True
+                action_type = "support_ticket"
+
+                output_text = str(item.get("output") or "")
+                match = re.search(r"\bTKT-[A-Z0-9-]+\b", output_text)
+                if match:
+                    ticket_id = match.group(0)
+
+            elif tool_name == "get_support_ticket":
+                action_taken = True
+                action_type = "support_ticket_lookup"
+
+                output_text = str(item.get("output") or "")
+                match = re.search(r"\bTKT-[A-Z0-9-]+\b", output_text)
+                if match and not ticket_id:
+                    ticket_id = match.group(0)
+
+        return action_taken, action_type, ticket_id
 
     def close(self) -> None:
         """Release the underlying Foundry project client."""
