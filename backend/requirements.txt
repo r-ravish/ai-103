@@ -1,0 +1,19 @@
+# ── Azure AI Search ──────────────────────────────────────────────────────────
+azure-search-documents==11.6.0
+
+# ── Tokenisation (for chunk-size counting) ───────────────────────────────────
+tiktoken>=0.7.0
+
+# ── FastAPI + server (Day 2 — agent core) ────────────────────────────────────
+fastapi>=0.115.0,<1.0.0
+uvicorn[standard]>=0.30.0
+
+# ── Azure AI Foundry Agents SDK ──────────────────────────────────────────────
+azure-ai-projects>=2.3.0
+azure-identity>=1.17.0
+
+# ── OpenAI SDK used by the Foundry agent endpoint ───────────────────────────
+openai>=1.68.0
+
+# ── Environment variables ───────────────────────────────────────────────────
+python-dotenv>=1.0.1
