@@ -129,14 +129,6 @@ class FoundryAgentService:
         # two known support-ticket tools and re-submit so the agent can finish.
         response = self._approve_mcp_requests(response)
 
-        for item in response.output:
-            if getattr(item, "type", None) == "mcp_call":
-                if getattr(item, "name", None) == "knowledge_base_retrieve":
-                    logger.info(
-                        "RETRIEVAL RAW OUTPUT: %s",
-                        getattr(item, "output", None),
-                    )
-
         # Capture any MCP action that occurred during this request.
         action_taken, action_type, ticket_id = self._extract_tool_action(response)
 
