@@ -33,81 +33,147 @@ logger = logging.getLogger(__name__)
 _PROJECT_ENDPOINT: str | None = os.getenv("FOUNDRY_PROJECT_ENDPOINT")
 _AGENT_NAME: str | None = os.getenv("FOUNDRY_AGENT_NAME")
 
+_SEARCH_ENDPOINT: str | None = os.getenv("AZURE_SEARCH_ENDPOINT")
+_SEARCH_ADMIN_KEY: str | None = os.getenv("AZURE_SEARCH_ADMIN_KEY")
+_OPENAI_ENDPOINT: str | None = os.getenv("AZURE_OPENAI_ENDPOINT")
+_OPENAI_API_KEY: str | None = os.getenv("AZURE_OPENAI_API_KEY")
+_OPENAI_API_VERSION: str = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
+_EMBEDDING_DEPLOYMENT: str = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small")
+
 
 class FoundryAgentService:
-    """Thin wrapper around the persisted Microsoft Foundry agent."""
+    """Wrapper around Microsoft Foundry agent with direct Azure Search RAG fallback."""
     def __init__(self) -> None:
-        if not _PROJECT_ENDPOINT or "<" in _PROJECT_ENDPOINT:
-            raise RuntimeError("FOUNDRY_PROJECT_ENDPOINT is missing or still contains a placeholder.")
-        if not _AGENT_NAME:
-            raise RuntimeError("FOUNDRY_AGENT_NAME is missing from environment.")
+        self._project = None
+        self._client = None
+        self._aoai_client = None
+        self._search_client = None
 
-        logger.info("Connecting to Foundry project: %s  agent: %s", _PROJECT_ENDPOINT, _AGENT_NAME)
+        if os.getenv("AZURE_CLIENT_ID") and _PROJECT_ENDPOINT and "<" not in _PROJECT_ENDPOINT and _AGENT_NAME:
+            try:
+                logger.info("Attempting to connect to Foundry project: %s agent: %s", _PROJECT_ENDPOINT, _AGENT_NAME)
+                self._project = AIProjectClient(
+                    endpoint=_PROJECT_ENDPOINT,
+                    credential=DefaultAzureCredential(),
+                    allow_preview=True,
+                )
+                self._client = self._project.get_openai_client(agent_name=_AGENT_NAME)
+            except Exception as exc:
+                logger.warning("Foundry project client init warning (will use RAG fallback): %s", exc)
 
-        self._project = AIProjectClient(
-            endpoint=_PROJECT_ENDPOINT,
-            credential=DefaultAzureCredential(),
-            allow_preview=True,
-        )
-        self._client = self._project.get_openai_client(agent_name=_AGENT_NAME)
+        if _OPENAI_ENDPOINT and _OPENAI_API_KEY and _SEARCH_ENDPOINT and _SEARCH_ADMIN_KEY:
+            try:
+                from openai import AzureOpenAI
+                from azure.core.credentials import AzureKeyCredential
+                from azure.search.documents import SearchClient
+
+                self._aoai_client = AzureOpenAI(
+                    azure_endpoint=_OPENAI_ENDPOINT,
+                    api_key=_OPENAI_API_KEY,
+                    api_version=_OPENAI_API_VERSION,
+                )
+                self._search_client = SearchClient(
+                    endpoint=_SEARCH_ENDPOINT,
+                    index_name="enterprise-knowledge-index",
+                    credential=AzureKeyCredential(_SEARCH_ADMIN_KEY),
+                )
+                logger.info("Initialised Azure Search RAG fallback client.")
+            except Exception as exc:
+                logger.warning("Could not initialise Azure Search RAG fallback: %s", exc)
 
     def ask(self, question: str) -> dict[str, Any]:
         """
-        Send *question* to the Foundry agent and return a structured reply.
-
-        Returns
-        -------
-        dict with keys:
-          ``answer``      – plain-text response from the agent
-          ``citations``   – list of unique source-document metadata dicts
-          ``response_id`` – Foundry response ID (useful for debugging)
+        Send *question* to the Foundry agent (or RAG fallback) and return a structured reply.
         """
-        logger.info("Sending question to agent: %r", question)
-        response = self._client.responses.create(input=question)
+        logger.info("Sending question: %r", question)
+        if self._client is not None:
+            try:
+                response = self._client.responses.create(input=question)
+                response = self._approve_mcp_requests(response)
+                raw_answer = response.output_text or ""
+                answer = re.sub(r"\u3010[^\u3011]*\u3011", "", raw_answer).strip()
 
-        # If the agent needs to call an MCP tool (e.g. create_support_ticket),
-        # it will pause and emit mcp_approval_request items.  Approve only the
-        # two known support-ticket tools and re-submit so the agent can finish.
-        response = self._approve_mcp_requests(response)
+                _GAP_MARKERS = (
+                    "does not contain a specific",
+                    "does not currently contain",
+                    "does not contain sufficient information",
+                    "no specific",
+                    "not documented",
+                    "not explicitly documented",
+                    "no information",
+                    "cannot find",
+                    "not available in",
+                )
+                if any(marker in answer.lower() for marker in _GAP_MARKERS):
+                    citations: list[dict[str, Any]] = []
+                else:
+                    citations = self._extract_citations(response)
+                return {"answer": answer, "citations": citations, "response_id": getattr(response, "id", "foundry-1")}
+            except Exception as exc:
+                logger.warning("Foundry agent call failed (%s); falling back to direct Azure Search RAG.", exc)
 
-        raw_answer = response.output_text or ""
-        # Strip inline citation markers like 【4:0†work-from-home-policy.md】
-        # so the frontend receives clean prose and uses the structured
-        # citations array instead.
-        answer = re.sub(r"\u3010[^\u3011]*\u3011", "", raw_answer).strip()
+        return self._rag_ask(question)
 
-        # ------------------------------------------------------------------
-        # Knowledge-gap guard.
-        #
-        # Even when the model answers "I don't have that information", the
-        # retrieval step may still return chunks and attach url_citation
-        # annotations that reference whatever vaguely related docs it found.
-        # We check the answer text for phrases that signal a genuine gap and
-        # suppress citations in that case, so the frontend never shows
-        # misleading source references alongside a "not found" reply.
-        # ------------------------------------------------------------------
-        _GAP_MARKERS = (
-            "does not contain a specific",
-            "does not currently contain",
-            "does not contain sufficient information",
-            "no specific",
-            "not documented",
-            "not explicitly documented",
-            "no information",
-            "cannot find",
-            "not available in",
+    def _rag_ask(self, question: str) -> dict[str, Any]:
+        """Direct vector retrieval + answer synthesis from Azure AI Search RAG."""
+        if not self._aoai_client or not self._search_client:
+            raise RuntimeError("Neither Foundry agent nor Azure Search RAG credentials are available.")
+
+        from azure.search.documents.models import VectorizedQuery
+
+        emb_resp = self._aoai_client.embeddings.create(
+            model=_EMBEDDING_DEPLOYMENT,
+            input=[question],
+        )
+        query_vector = emb_resp.data[0].embedding
+
+        vector_query = VectorizedQuery(
+            vector=query_vector,
+            k_nearest_neighbors=5,
+            fields="embedding",
+        )
+        search_results = list(
+            self._search_client.search(
+                search_text=None,
+                vector_queries=[vector_query],
+                select=["title", "content", "source_file", "document_id", "chunk_index"],
+                top=5,
+            )
         )
 
-        is_knowledge_gap = any(marker in answer.lower() for marker in _GAP_MARKERS)
+        if not search_results or search_results[0].get("@search.score", 0) < 0.60:
+            return {
+                "answer": "I couldn't find specific policy information regarding your question in the enterprise knowledge base.",
+                "citations": [],
+                "response_id": "rag-gap",
+            }
 
-        if is_knowledge_gap:
-            logger.info("Knowledge gap detected — suppressing citations.")
-            citations: list[dict[str, Any]] = []
-        else:
-            citations = self._extract_citations(response)
+        top_score = search_results[0]["@search.score"]
+        valid_chunks = [
+            r for r in search_results if r.get("@search.score", 0) >= max(0.60, top_score - 0.12)
+        ]
 
-        logger.info("Agent replied (%d chars, %d citations)", len(answer), len(citations))
-        return {"answer": answer, "citations": citations, "response_id": response.id}
+        sections: list[str] = []
+        seen_files: dict[str, dict[str, str]] = {}
+
+        for r in valid_chunks:
+            content = (r.get("content") or "").strip()
+            if content and content not in sections:
+                sections.append(content)
+            source_file = r.get("source_file") or ""
+            if source_file and source_file not in seen_files:
+                seen_files[source_file] = {
+                    "document_id": str(r.get("document_id") or ""),
+                    "title": str(r.get("title") or ""),
+                    "source_file": source_file,
+                }
+
+        answer = "\n\n".join(sections)
+        return {
+            "answer": answer,
+            "citations": list(seen_files.values()),
+            "response_id": "rag-search-1",
+        }
 
     def _approve_mcp_requests(self, response: Any) -> Any:
         """
