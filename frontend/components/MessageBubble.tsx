@@ -111,6 +111,28 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
           >
             {message.content}
           </p>
+          {message.actionTaken && (
+            <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-[var(--color-seal)]/30 bg-[var(--color-seal-soft)] px-3 py-1.5 text-xs font-medium text-[var(--color-seal)]">
+              <span className="h-2 w-2 rounded-full bg-[var(--color-seal)]" />
+              <span>{message.actionName || "Action Executed"}</span>
+              {message.ticketId && (
+                <span className="font-mono bg-white/60 px-1.5 py-0.5 rounded border border-[var(--color-seal)]/20">
+                  {message.ticketId}
+                </span>
+              )}
+            </div>
+          )}
+          {message.isEscalated && (
+            <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-[var(--color-flag-border)] bg-[var(--color-flag-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-flag)]">
+              <span className="h-2 w-2 rounded-full bg-[var(--color-flag)]" />
+              <span>Escalated to Human Support</span>
+              {message.escalationReason && (
+                <span className="text-[11px] opacity-80">
+                  ({message.escalationReason})
+                </span>
+              )}
+            </div>
+          )}
           {message.citations && <CitationList citations={message.citations} />}
         </div>
         <Timestamp value={message.timestamp} />

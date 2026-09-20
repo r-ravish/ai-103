@@ -38,6 +38,11 @@ export default function Chat() {
         content: result.answer,
         citations: result.citations,
         isKnowledgeGap: result.isKnowledgeGap,
+        actionTaken: result.actionTaken,
+        actionName: result.actionName,
+        ticketId: result.ticketId,
+        isEscalated: result.isEscalated,
+        escalationReason: result.escalationReason,
         timestamp: Date.now(),
       };
 
