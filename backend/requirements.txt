@@ -12,6 +12,9 @@ uvicorn[standard]>=0.30.0
 azure-ai-projects>=2.3.0
 azure-identity>=1.17.0
 
+# ── Azure AI Content Safety (Day 3 — content safety wiring) ─────────────────
+azure-ai-contentsafety>=1.0.0
+
 # ── OpenAI SDK used by the Foundry agent endpoint ───────────────────────────
 openai>=1.68.0
 
