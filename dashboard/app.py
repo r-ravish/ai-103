@@ -234,3 +234,13 @@ st.caption(
     "Mock/sample data for dashboard development. "
     "This data will be replaced with real evaluation and tracing data later."
 )
+
+st.divider()
+
+st.header("Escalation / Human Review")
+
+st.info(
+    "No escalation events recorded yet. "
+    "Escalation analytics will appear here once the "
+    "confidence-based escalation system is enabled."
+)
