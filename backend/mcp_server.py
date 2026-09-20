@@ -6,12 +6,31 @@ import os
 import httpx
 from dotenv import load_dotenv
 from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 
 load_dotenv()
 
 BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
 MCP_HOST: str = os.getenv("MCP_HOST", "127.0.0.1")
 MCP_PORT: int = int(os.getenv("MCP_PORT", "8001"))
+
+MCP_PUBLIC_HOST: str = os.getenv("MCP_PUBLIC_HOST", "")
+MCP_PUBLIC_ORIGIN: str = f"https://{MCP_PUBLIC_HOST}" if MCP_PUBLIC_HOST else ""
+
+transport_security = TransportSecuritySettings(
+    allowed_hosts=[
+        *([MCP_PUBLIC_HOST, f"{MCP_PUBLIC_HOST}:*"] if MCP_PUBLIC_HOST else []),
+        "127.0.0.1",
+        "127.0.0.1:*",
+        "localhost",
+        "localhost:*",
+    ],
+    allowed_origins=[
+        *([MCP_PUBLIC_ORIGIN] if MCP_PUBLIC_ORIGIN else []),
+        "http://127.0.0.1:8001",
+        "http://localhost:8001",
+    ],
+)
 
 mcp = MCPServer("enterprise-knowledge-agent")
 
@@ -110,6 +129,6 @@ if __name__ == "__main__":
         transport="streamable-http",
         host=MCP_HOST,
         port=MCP_PORT,
-        stateless_http=True,
-        json_response=True,
+        streamable_http_path="/mcp",
+        transport_security=transport_security,
     )

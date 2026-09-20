@@ -1,9 +1,10 @@
 import asyncio
+import os
 
 from mcp import Client
 
 
-MCP_URL = "http://127.0.0.1:8001/mcp"
+MCP_URL: str = os.getenv("MCP_URL", "http://127.0.0.1:8001/mcp")
 
 
 async def main():
@@ -81,6 +82,7 @@ async def main():
                     "ticket_id": ticket_id,
                 },
             )
+
 
             print("\nget_support_ticket result:")
 
