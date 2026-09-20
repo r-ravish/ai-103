@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Message } from "@/types/chat";
-import { getMockResponse, MOCK_RESPONSE_DELAY_MS } from "@/lib/mockResponses";
+import { sendChatMessage } from "@/lib/api";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 import EmptyState from "./EmptyState";
@@ -30,36 +30,29 @@ export default function Chat() {
     setIsLoading(true);
 
     try {
-      // Artificial delay so the loading state is visible. This is the
-      // seam where a real backend call (fetch to the agent API) would
-      // replace getMockResponse — the rest of the flow stays the same.
-      await new Promise((resolve) =>
-        setTimeout(resolve, MOCK_RESPONSE_DELAY_MS)
-      );
-
-      const mock = getMockResponse(content);
+      const result = await sendChatMessage(content);
 
       const assistantMessage: Message = {
         id: createId(),
         role: "assistant",
-        content: mock.content,
-        citations: mock.citations,
-        isKnowledgeGap: mock.isKnowledgeGap,
+        content: result.answer,
+        citations: result.citations,
+        isKnowledgeGap: result.isKnowledgeGap,
         timestamp: Date.now(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
-      // Mock data should never throw, but don't swallow it silently if
-      // something unexpected happens — surface a visible assistant
-      // message rather than failing silently, without pretending it's
-      // a knowledge-gap or a normal grounded answer.
-      console.error("Failed to produce a mock assistant response:", error);
+      console.error("Failed to fetch response from agent API:", error);
+      const errorMessageText =
+        error instanceof Error && error.message
+          ? error.message
+          : "Something went wrong producing a response. Please try again.";
+
       const errorMessage: Message = {
         id: createId(),
         role: "assistant",
-        content:
-          "Something went wrong producing a response. Please try again.",
+        content: errorMessageText,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, errorMessage]);
