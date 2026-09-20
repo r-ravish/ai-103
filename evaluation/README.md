@@ -5,12 +5,15 @@ Evaluation module for the AI-103 Enterprise Knowledge Agent.
 ## Contents
 
 | File | Description |
-|---|---|
-| [`evaluation_set.json`](evaluation_set.json) | Machine-readable evaluation set (15 questions) — primary source of truth for automated testing |
+|---|-|
+| [`evaluation_set.json`](evaluation_set.json) | Machine-readable evaluation set v2.0 (19 questions) — primary source of truth |
 | [`evaluation_set.md`](evaluation_set.md) | Human-readable companion; derived from the JSON and the pilot policy documents |
 | [`content_safety.md`](content_safety.md) | Content safety preparation notes, test scenarios, and Azure AI Content Safety integration guidance |
-| [`run_eval.py`](run_eval.py) | **Day 3 evaluation script skeleton** — sends questions to `POST /chat`, captures answers and citations, writes JSONL results |
-| [`results/`](results/) | Run output directory (git-ignored `*.jsonl` files; `.gitkeep` preserves the folder) |
+| [`run_eval.py`](run_eval.py) | **Day 3 full evaluation script** — scores correctness, citations, tool calls, hallucination; writes JSON/CSV/MD results |
+| [`tracing.md`](tracing.md) | **Day 3 Foundry tracing guide** — how to inspect query → retrieval → tool → answer in the Azure AI Foundry portal |
+| [`results/day3-results.json`](results/day3-results.json) | Structured evaluation results (full record per question) |
+| [`results/day3-results.csv`](results/day3-results.csv) | CSV companion for spreadsheet review |
+| [`results/day3-summary.md`](results/day3-summary.md) | Human-readable Day 3 evaluation summary report |
 
 ## Question Categories
 
@@ -20,7 +23,9 @@ Evaluation module for the AI-103 Enterprise Knowledge Agent.
 | Edge Case | 4 | Boundary conditions and conditional policy reasoning |
 | Knowledge Gap | 2 | Topics absent from the corpus (agent must not hallucinate) |
 | Out-of-Scope | 1 | Outside the enterprise policy domain entirely |
-| **Total** | **15** | |
+| Tool Action | 2 | **Day 3** — questions requiring `create_support_ticket` MCP tool call |
+| No-Tool | 2 | **Day 3** — policy questions that must NOT trigger a tool call |
+| **Total** | **19** | |
 
 ## Policy Coverage
 
