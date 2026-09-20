@@ -65,6 +65,11 @@ class FoundryAgentService:
         logger.info("Sending question to agent: %r", question)
         response = self._client.responses.create(input=question)
 
+        # If the agent needs to call an MCP tool (e.g. create_support_ticket),
+        # it will pause and emit mcp_approval_request items.  Approve only the
+        # two known support-ticket tools and re-submit so the agent can finish.
+        response = self._approve_mcp_requests(response)
+
         raw_answer = response.output_text or ""
         # Strip inline citation markers like 【4:0†work-from-home-policy.md】
         # so the frontend receives clean prose and uses the structured
@@ -103,6 +108,74 @@ class FoundryAgentService:
 
         logger.info("Agent replied (%d chars, %d citations)", len(answer), len(citations))
         return {"answer": answer, "citations": citations, "response_id": response.id}
+
+    def _approve_mcp_requests(self, response: Any) -> Any:
+        """
+        Approve pending MCP tool calls, but *only* for the two known
+        support-ticket tools on the enterprise-support-mcp server.
+
+        The Responses API pauses and emits ``mcp_approval_request`` output
+        items whenever the agent wants to call an MCP tool that requires
+        human-in-the-loop approval.  We collect those requests, validate
+        each one against a strict allowlist, then re-submit with approval
+        so the agent can complete its turn.
+
+        Any unexpected server label or tool name raises immediately —
+        this is intentional; we never silently approve unknown calls.
+        """
+        _ALLOWED_SERVER = "enterprise-support-mcp"
+        _ALLOWED_TOOLS = {"create_support_ticket", "get_support_ticket"}
+
+        approval_inputs: list[dict[str, Any]] = []
+
+        for item in response.output:
+            if getattr(item, "type", None) != "mcp_approval_request":
+                continue
+
+            server_label = getattr(item, "server_label", None)
+            tool_name = getattr(item, "name", None)
+
+            logger.info(
+                "MCP approval request: server=%s tool=%s",
+                server_label,
+                tool_name,
+            )
+
+            if server_label != _ALLOWED_SERVER:
+                raise RuntimeError(
+                    f"Unexpected MCP approval server: {server_label!r}. "
+                    f"Only {_ALLOWED_SERVER!r} is permitted."
+                )
+
+            if tool_name not in _ALLOWED_TOOLS:
+                raise RuntimeError(
+                    f"Unexpected MCP tool requested: {tool_name!r}. "
+                    f"Allowed tools: {sorted(_ALLOWED_TOOLS)}"
+                )
+
+            approval_inputs.append(
+                {
+                    "type": "mcp_approval_response",
+                    "approve": True,
+                    "approval_request_id": item.id,
+                }
+            )
+
+        if not approval_inputs:
+            # Nothing to approve — agent either finished or used a different
+            # mechanism (e.g. knowledge_base_retrieve via built-in MCP).
+            return response
+
+        logger.info(
+            "Approving %d MCP tool call(s) and continuing response %s",
+            len(approval_inputs),
+            response.id,
+        )
+
+        return self._client.responses.create(
+            previous_response_id=response.id,
+            input=approval_inputs,
+        )
 
     def close(self) -> None:
         """Release the underlying Foundry project client."""
