@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import json
+import os
+
+import httpx
+from dotenv import load_dotenv
+from mcp.server.mcpserver import MCPServer
+
+load_dotenv()
+
+BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
+MCP_HOST: str = os.getenv("MCP_HOST", "127.0.0.1")
+MCP_PORT: int = int(os.getenv("MCP_PORT", "8001"))
+
+mcp = MCPServer("enterprise-knowledge-agent")
+
+
+async def _request(method: str, path: str, **kwargs) -> httpx.Response:
+    async with httpx.AsyncClient(base_url=BACKEND_URL, timeout=60.0) as client:
+        return await client.request(method, path, **kwargs)
+
+
+def _detail(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+        if isinstance(body, dict):
+            return body.get("detail") or json.dumps(body)
+        return json.dumps(body)
+    except Exception:
+        return response.text
+
+
+@mcp.tool()
+async def create_support_ticket(title: str, description: str, priority: str = "medium") -> str:
+    """Create an internal support ticket when the knowledge base cannot help
+    or the user needs a support issue reported. Returns the ticket ID."""
+    title = title.strip()
+    description = description.strip()
+    priority = priority.strip().lower()
+
+    if not title:
+        return "Error: title is required."
+    if not description:
+        return "Error: description is required."
+    if priority not in {"low", "medium", "high"}:
+        priority = "medium"
+
+    try:
+        response = await _request(
+            "POST",
+            "/internal/tickets",
+            json={"title": title, "description": description, "priority": priority},
+        )
+        response.raise_for_status()
+        ticket = response.json()
+        return (
+            "Ticket created successfully.\n"
+            f"ID: {ticket['ticket_id']}\n"
+            f"Title: {ticket['title']}\n"
+            f"Priority: {ticket['priority']}\n"
+            f"Status: {ticket['status']}\n"
+            f"Created: {ticket['created_at']}"
+        )
+    except httpx.HTTPStatusError as exc:
+        return f"Backend error {exc.response.status_code}: {_detail(exc.response)}"
+    except httpx.RequestError as exc:
+        return f"Cannot reach backend at {BACKEND_URL}: {exc}"
+    except (KeyError, ValueError) as exc:
+        return f"Invalid backend response: {exc}"
+
+
+@mcp.tool()
+async def get_support_ticket(ticket_id: str) -> str:
+    """Look up a support ticket by ID, for example TKT-A1B2C3D4."""
+    ticket_id = ticket_id.strip()
+    if not ticket_id:
+        return "Error: ticket_id is required."
+
+    try:
+        response = await _request("GET", f"/internal/tickets/{ticket_id}")
+
+        if response.status_code == 404:
+            return f"Ticket {ticket_id!r} not found."
+
+        response.raise_for_status()
+        data = response.json()
+        ticket = data.get("ticket", {}) if isinstance(data, dict) else {}
+
+        if not ticket:
+            return f"Ticket {ticket_id!r} was not found."
+
+        return (
+            "Ticket found.\n"
+            f"ID: {ticket.get('ticket_id')}\n"
+            f"Title: {ticket.get('title')}\n"
+            f"Description: {ticket.get('description')}\n"
+            f"Priority: {ticket.get('priority')}\n"
+            f"Status: {ticket.get('status')}\n"
+            f"Created: {ticket.get('created_at')}"
+        )
+    except httpx.HTTPStatusError as exc:
+        return f"Backend error {exc.response.status_code}: {_detail(exc.response)}"
+    except httpx.RequestError as exc:
+        return f"Cannot reach backend at {BACKEND_URL}: {exc}"
+
+
+if __name__ == "__main__":
+    mcp.run(
+        transport="streamable-http",
+        host=MCP_HOST,
+        port=MCP_PORT,
+        stateless_http=True,
+        json_response=True,
+    )

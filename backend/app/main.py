@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from app.content_safety import ContentSafetyClient
 from app.foundry_agent import FoundryAgentService
+from routes.tickets import router as tickets_router
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,8 @@ app = FastAPI(
     version="0.2.0",
     lifespan=lifespan,
 )
+
+app.include_router(tickets_router)
 
 
 # ---------------------------------------------------------------------------
