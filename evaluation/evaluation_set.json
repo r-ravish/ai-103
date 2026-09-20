@@ -1,8 +1,8 @@
 {
   "evaluation_set": {
     "name": "AI-103 Enterprise Policy Evaluation",
-    "version": "1.0",
-    "description": "Evaluation set for grounded enterprise-policy question answering against the AI-103 pilot corpus (5 synthetic policy documents, 19 indexed chunks).",
+    "version": "2.0",
+    "description": "Day 3 evaluation set for grounded enterprise-policy question answering, tool-calling, and hallucination detection against the AI-103 pilot corpus. Includes tool-action and no-tool categories for MCP create_support_ticket validation.",
     "pilot_corpus": [
       "docs/pilot-documents/leave-policy.md",
       "docs/pilot-documents/reimbursement-policy.md",
@@ -10,13 +10,21 @@
       "docs/pilot-documents/it-security-policy.md",
       "docs/pilot-documents/employee-benefits.md"
     ],
-    "total_questions": 15,
+    "mcp_tools": [
+      "create_support_ticket",
+      "get_support_ticket"
+    ],
+    "total_questions": 19,
     "category_breakdown": {
       "answerable": 8,
       "edge_case": 4,
       "knowledge_gap": 2,
-      "out_of_scope": 1
+      "out_of_scope": 1,
+      "tool_action": 2,
+      "no_tool": 2
     },
+    "schema_version": "2.0",
+    "schema_notes": "v2.0 adds tool_expected, tool_name, citation_expected, escalation_expected to every question.",
     "questions": [
       {
         "id": "LEAVE-001",
@@ -27,7 +35,11 @@
         "expected_source": "leave-policy.md",
         "expected_facts": [
           "Employees are entitled to 18 days of paid annual leave per calendar year."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "LEAVE-002",
@@ -39,7 +51,11 @@
         "expected_facts": [
           "Leave requests should normally be submitted at least 3 working days before the intended start date.",
           "Requests are submitted through the employee leave portal and require manager approval."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "LEAVE-003",
@@ -50,7 +66,11 @@
         "expected_source": "leave-policy.md",
         "expected_facts": [
           "Company holidays are separate from annual leave and do not reduce an employee's annual leave balance."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "LEAVE-004",
@@ -62,7 +82,11 @@
         "expected_facts": [
           "For absences longer than three consecutive working days, supporting medical documentation may be required.",
           "The policy uses the phrase 'longer than three consecutive working days' — an absence of exactly three days does not satisfy this condition as written."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "REIMB-001",
@@ -73,7 +97,11 @@
         "expected_source": "reimbursement-policy.md",
         "expected_facts": [
           "All reimbursement requests must be submitted through the expense management system within 30 days of the expense date."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "REIMB-002",
@@ -84,7 +112,11 @@
         "expected_source": "reimbursement-policy.md",
         "expected_facts": [
           "Employees must provide an itemized receipt for expenses above INR 1,000."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "REIMB-003",
@@ -96,7 +128,11 @@
         "expected_facts": [
           "Expense claims are reviewed by the employee's manager.",
           "Finance may request additional documentation before approving reimbursement."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "WFH-001",
@@ -107,7 +143,11 @@
         "expected_source": "work-from-home-policy.md",
         "expected_facts": [
           "Eligible employees may work from home for up to 3 days per week, subject to team requirements and manager approval."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "WFH-002",
@@ -119,7 +159,11 @@
         "expected_facts": [
           "Employees must maintain their normal working schedule while working remotely.",
           "An alternative schedule may be used only if it has been approved by the employee's manager."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "WFH-003",
@@ -131,7 +175,11 @@
         "expected_facts": [
           "The company may provide approved laptops, monitors, keyboards, and other equipment required for remote work.",
           "Employees are responsible for protecting company equipment from unauthorized access."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "SEC-001",
@@ -143,7 +191,11 @@
         "expected_facts": [
           "Passwords should contain at least 12 characters.",
           "Passwords should not contain easily guessable information such as the employee's name, date of birth, or company name."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       },
       {
         "id": "VPN-001",
@@ -152,7 +204,11 @@
         "policy": null,
         "expected_behavior": "The agent should state that the available knowledge base does not contain sufficient information to answer the VPN question and must not invent a VPN procedure, approval process, or technical setup steps. Citing an unrelated policy document as evidence for VPN access requirements is not acceptable. This is the canonical knowledge-gap test case documented in the ingestion contract pilot validation.",
         "expected_source": null,
-        "expected_facts": []
+        "expected_facts": [],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": false,
+        "escalation_expected": false
       },
       {
         "id": "LEAVE-005",
@@ -161,7 +217,11 @@
         "policy": null,
         "expected_behavior": "Agent should indicate that the pilot knowledge base does not contain information about maternity or paternity leave. It may note that the Leave policy covers annual leave, sick leave, and public holidays, but must clearly state that parental leave provisions are absent from the corpus. Agent must not fabricate parental leave entitlements.",
         "expected_source": null,
-        "expected_facts": []
+        "expected_facts": [],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": false,
+        "escalation_expected": false
       },
       {
         "id": "OOS-001",
@@ -170,7 +230,11 @@
         "policy": null,
         "expected_behavior": "Agent should clearly state that financial or business performance information is not available in the enterprise policy knowledge base and must not attempt to speculate or fabricate an answer. Agent should not cite any policy document as evidence for financial data.",
         "expected_source": null,
-        "expected_facts": []
+        "expected_facts": [],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": false,
+        "escalation_expected": false
       },
       {
         "id": "EDGE-001",
@@ -181,7 +245,74 @@
         "expected_source": "employee-benefits.md",
         "expected_facts": [
           "Eligible dependents can be added during the designated enrollment period or following a qualifying life event."
-        ]
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
+      },
+      {
+        "id": "TOOL-001",
+        "question": "I cannot access the HR portal after resetting my password. I have tried logging in three times and keep getting an error. Please create a support ticket for this issue.",
+        "category": "tool_action",
+        "policy": null,
+        "expected_behavior": "Agent should recognise that this is an actionable IT support request that cannot be resolved by retrieving policy documents. It should call the create_support_ticket MCP tool with an appropriate title (e.g. 'Cannot access HR portal after password reset'), description, and priority (medium or high). The final response must include the ticket ID returned by the tool (format: TKT-XXXXXXXX) and confirm the ticket was created. Agent must NOT fabricate a ticket ID without calling the tool.",
+        "expected_source": null,
+        "expected_facts": [
+          "A support ticket is created with a ticket ID in the format TKT-XXXXXXXX.",
+          "The ticket title and description accurately reflect the HR portal access issue."
+        ],
+        "tool_expected": true,
+        "tool_name": "create_support_ticket",
+        "citation_expected": false,
+        "escalation_expected": false
+      },
+      {
+        "id": "TOOL-002",
+        "question": "My laptop will not connect to the corporate WiFi network. I have restarted it twice and the issue persists. Please raise an IT support ticket on my behalf.",
+        "category": "tool_action",
+        "policy": null,
+        "expected_behavior": "Agent should recognise this as an actionable IT support request and call the create_support_ticket MCP tool with a title describing the WiFi connectivity issue, a description capturing the details (restarted twice, issue persists), and an appropriate priority. The final response must include the ticket ID in format TKT-XXXXXXXX. Agent must NOT fabricate a ticket ID without calling the tool.",
+        "expected_source": null,
+        "expected_facts": [
+          "A support ticket is created with a ticket ID in the format TKT-XXXXXXXX.",
+          "The ticket describes the corporate WiFi connectivity issue."
+        ],
+        "tool_expected": true,
+        "tool_name": "create_support_ticket",
+        "citation_expected": false,
+        "escalation_expected": false
+      },
+      {
+        "id": "NOTOOL-001",
+        "question": "What is the company's expense reimbursement policy for business travel?",
+        "category": "no_tool",
+        "policy": "reimbursement",
+        "expected_behavior": "Agent should answer using the Reimbursement policy document — covering eligible categories, receipt requirements, and the 30-day submission deadline. It must NOT call create_support_ticket or any other tool. This tests that the agent is selective and does not call a tool when RAG retrieval is sufficient.",
+        "expected_source": "reimbursement-policy.md",
+        "expected_facts": [
+          "All reimbursement requests must be submitted through the expense management system within 30 days of the expense date.",
+          "Employees must provide an itemized receipt for expenses above INR 1,000."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
+      },
+      {
+        "id": "NOTOOL-002",
+        "question": "How many days of sick leave can I take before I need to provide a doctor's note?",
+        "category": "no_tool",
+        "policy": "leave",
+        "expected_behavior": "Agent should answer from the Leave policy sick leave section — citing the 'longer than three consecutive working days' threshold for medical documentation. It must NOT call create_support_ticket or any other tool. This tests that a factual policy question does not incorrectly trigger tool use.",
+        "expected_source": "leave-policy.md",
+        "expected_facts": [
+          "For absences longer than three consecutive working days, supporting medical documentation may be required."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false
       }
     ]
   }
