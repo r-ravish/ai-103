@@ -88,8 +88,28 @@ def chunk_text(text: str, max_tokens: int = MAX_TOKENS, overlap: int = OVERLAP_T
     return chunks
 
 
+def extract_file_text(path: Path) -> str:
+    """Extract plain text from .md, .txt, .pdf, or other policy documents safely."""
+    suffix = path.suffix.lower()
+    if suffix == ".pdf":
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(str(path))
+            pages_text = []
+            for page in reader.pages:
+                t = page.extract_text()
+                if t:
+                    pages_text.append(t)
+            if pages_text:
+                return "\n\n".join(pages_text)
+        except Exception:
+            pass
+
+    return path.read_text(encoding="utf-8", errors="ignore")
+
+
 def build_chunks_for_file(path: Path):
-    raw_text = path.read_text(encoding="utf-8")
+    raw_text = extract_file_text(path)
     text = strip_frontmatter(raw_text)
 
     document_id = path.stem

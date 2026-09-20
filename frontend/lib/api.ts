@@ -18,6 +18,11 @@ export interface BackendChatResponse {
   answer: string;
   citations?: BackendCitation[];
   is_knowledge_gap?: boolean;
+  action_taken?: boolean;
+  action_name?: string;
+  ticket_id?: string;
+  escalated?: boolean;
+  escalation_reason?: string;
   conversation_id?: string;
   response_id?: string;
 }
@@ -26,6 +31,11 @@ export interface ChatResult {
   answer: string;
   citations: Citation[];
   isKnowledgeGap: boolean;
+  actionTaken?: boolean;
+  actionName?: string;
+  ticketId?: string;
+  isEscalated?: boolean;
+  escalationReason?: string;
   conversationId?: string;
 }
 
@@ -139,6 +149,11 @@ export async function sendChatMessage(question: string): Promise<ChatResult> {
     answer: data.answer || "",
     citations,
     isKnowledgeGap,
+    actionTaken: data.action_taken,
+    actionName: data.action_name,
+    ticketId: data.ticket_id,
+    isEscalated: data.escalated,
+    escalationReason: data.escalation_reason,
     conversationId: data.conversation_id,
   };
 }
