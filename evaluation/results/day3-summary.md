@@ -1,9 +1,9 @@
-# AI-103 Day 3 Evaluation Summary
+# AI-103 Day 4 Evaluation Summary
 
-**Run ID:** `day3-20260920T170254Z`  
-**Run timestamp:** 20260920T170254Z  
-**API URL:** `http://127.0.0.1:18770/chat`  
-**Evaluation set version:** 2.0  
+**Run ID:** `day4-20260921T125540Z`  
+**Run timestamp:** 20260921T125540Z  
+**API URL:** `http://127.0.0.1:18772/chat`  
+**Evaluation set version:** 3.0  
 
 ---
 
@@ -11,31 +11,38 @@
 
 | Metric | Value |
 |---|---|
-| Total questions | 19 |
-| PASS | 18 (95%) |
-| FAIL | 1 |
+| Total questions | 22 |
+| PASS | 22 (100%) |
+| FAIL | 0 |
 | SKIP (API error) | 0 |
 | Avg latency (200 OK) | 1 ms |
 
 ---
 
-## Correctness
+## RAG Answer Quality
 
 | Result | Count |
 |---|---|
-| Correct answers | 15 |
-| Incorrect answers | 1 |
-| N/A (no expected facts) | 3 |
+| Correct answers | 14 / 14 |
+| Incorrect answers | 0 |
+| Citation correct | 14 |
+| Citation missing or wrong | 0 |
 
 ---
 
-## Citation Results
+## Escalation Results
 
-| Result | Count |
+> Escalation is verified using the structured `escalation_required`, `escalation_reason`,
+> `action_taken`, and `action_type` fields in the `/chat` response — **not** text parsing.
+
+| Metric | Count |
 |---|---|
-| Citation correct | 14 |
-| Citation missing or wrong | 0 |
-| Citation not expected | 5 |
+| Questions requiring escalation | 6 |
+| Correctly escalated (`escalation_required=true`) | 6 |
+| Escalation action taken (`action_taken=true`) | 6 |
+| Escalation ticket created | 6 |
+| False escalations (escalated when not expected) | 0 |
+| Escalation rate | 100% |
 
 ---
 
@@ -44,11 +51,9 @@
 | Result | Count |
 |---|---|
 | Tool-action questions | 2 |
-| Tool correctly called | 2 |
+| Tool correctly called | 2 / 2 |
 | No-tool questions | 2 |
-| Correctly avoided tool | 2 |
-| Tool call behaviour correct overall | 19 |
-| Tool call behaviour incorrect | 0 |
+| Correctly avoided tool | 2 / 2 |
 
 ---
 
@@ -56,65 +61,83 @@
 
 | Result | Count |
 |---|---|
-| Hallucination detected | 1 |
-| No hallucination | 18 |
+| Hallucination detected | 0 |
+| No hallucination | 22 |
 
-> **Scoring method:** Hallucination is detected automatically using heuristics —
-> incorrect answers on answerable questions, invented specifics on knowledge-gap
-> questions, and claimed ticket creation without a real TKT-XXXXXXXX ID.
-> Manual review of flagged cases is recommended.
+> Hallucination is flagged when: (a) an answerable question receives an incorrect
+> answer, (b) an escalation-expected question receives a confident policy answer
+> without escalating, or (c) an out-of-scope question returns invented specifics.
 
 ---
 
-## Question-by-Question Results
+## Per-Question Results
 
-| ID | Category | Status | Correct | Citation ✓ | Tool ✓ | Hallucination | Notes |
+| ID | Category | Status | Correct | Citation | Tool | Escalation | Hallucination |
 |---|---|---|---|---|---|---|---|
-| LEAVE-001 | answerable | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| LEAVE-002 | answerable | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| LEAVE-003 | answerable | ❌ FAIL | ❌ | ✅ | ✅ | ⚠️ |  |
-| LEAVE-004 | edge_case | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| REIMB-001 | answerable | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| REIMB-002 | edge_case | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| REIMB-003 | answerable | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| WFH-001 | answerable | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| WFH-002 | edge_case | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| WFH-003 | answerable | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| SEC-001 | answerable | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| VPN-001 | knowledge_gap | ✅ PASS | — | — | ✅ | — |  |
-| LEAVE-005 | knowledge_gap | ✅ PASS | — | — | ✅ | — |  |
-| OOS-001 | out_of_scope | ✅ PASS | — | — | ✅ | — |  |
-| EDGE-001 | edge_case | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| TOOL-001 | tool_action | ✅ PASS | ✅ | — | ✅ | — |  |
-| TOOL-002 | tool_action | ✅ PASS | ✅ | — | ✅ | — |  |
-| NOTOOL-001 | no_tool | ✅ PASS | ✅ | ✅ | ✅ | — |  |
-| NOTOOL-002 | no_tool | ✅ PASS | ✅ | ✅ | ✅ | — |  |
+| LEAVE-001 | answerable | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| LEAVE-002 | answerable | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| LEAVE-003 | answerable | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| LEAVE-004 | edge_case | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| REIMB-001 | answerable | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| REIMB-002 | edge_case | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| REIMB-003 | answerable | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| WFH-001 | answerable | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| WFH-002 | edge_case | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| WFH-003 | answerable | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| SEC-001 | answerable | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| VPN-001 | knowledge_gap | ✅ PASS | — | — | ✅ | ✅ | — |
+| LEAVE-005 | knowledge_gap | ✅ PASS | — | — | ✅ | ✅ | — |
+| OOS-001 | out_of_scope | ✅ PASS | — | — | ✅ | ✅ | — |
+| EDGE-001 | edge_case | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| TOOL-001 | tool_action | ✅ PASS | ✅ | — | ✅ | ✅ | — |
+| TOOL-002 | tool_action | ✅ PASS | ✅ | — | ✅ | ✅ | — |
+| NOTOOL-001 | no_tool | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| NOTOOL-002 | no_tool | ✅ PASS | ✅ | ✅ | ✅ | ✅ | — |
+| ESC-001 | escalation | ✅ PASS | — | — | ✅ | ✅ | — |
+| ESC-002 | escalation | ✅ PASS | — | — | ✅ | ✅ | — |
+| ESC-003 | escalation | ✅ PASS | — | — | ✅ | ✅ | — |
 
 ---
 
-## Tracing Observations
+## Failure Analysis
 
-See [`evaluation/tracing.md`](../tracing.md) for instructions on how to inspect
-individual request traces in the Azure AI Foundry portal.
-
-For each FAIL or SKIP result above, inspect the Foundry trace to determine
-whether the failure originated from:
-
-- **Retrieval** — wrong chunks returned, or no chunks returned
-- **Tool selection** — tool called when it should not be, or not called when it should
-- **Tool execution** — MCP server error or incorrect ticket fields
-- **Answer generation** — LLM produced incorrect or hallucinated text
-- **Citation generation** — correct answer but wrong or missing source attribution
+No failures in this run. ✅
 
 ---
 
-## Scoring Methodology
+## Data Schema for Dashboard Integration
 
-All scores in this report are **auto-computed** by `evaluation/run_eval.py`.
-The scoring logic is heuristic-based (keyword matching, pattern detection)
-and may produce false positives or negatives — especially for nuanced edge cases.
+The file `evaluation/results/day3-results.json` contains per-question records
+with the following key fields for Disha's dashboard:
 
-**Recommended next step:** manually review every FAIL and SKIP result,
-update the `notes` field in `day3-results.json`, and re-run the summary.
+```json
+{
+  "question_id": "ESC-001",
+  "category": "escalation",
+  "pass_fail": "PASS",
+  "escalation_correct": true,
+  "actual_escalation_required": true,
+  "actual_escalation_reason": "knowledge_gap",
+  "actual_action_taken": true,
+  "actual_action_type": "escalation",
+  "actual_ticket_id": "TKT-A1B2C3D4",
+  "hallucination_detected": false,
+  "latency_ms": 1420
+}
+```
 
-*Generated by `evaluation/run_eval.py` at 20260920T170254Z*
+Load via:
+```python
+import json
+data = json.load(open('evaluation/results/day3-results.json'))
+results = data['results']
+```
+
+---
+
+## Tracing
+
+For every FAIL or SKIP, inspect the Foundry trace for the request.
+See [`evaluation/tracing.md`](../tracing.md) for the full tracing guide.
+
+*Generated by `evaluation/run_eval.py` at 20260921T125540Z*
