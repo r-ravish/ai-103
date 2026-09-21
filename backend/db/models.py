@@ -4,17 +4,18 @@ backend/db/models.py
 SQLAlchemy 2.0 ORM models for the Enterprise Knowledge Agent.
 
 Five core entities:
-    User            -- employees who will authenticate (auth wired later)
+    User            -- employee/admin accounts (auth + RBAC, see routes/auth.py)
     Document        -- policy documents ingested into Azure AI Search
     Ticket          -- IT/HR support tickets created by the agent or users
-    Feedback        -- per-response quality ratings from employees
+    Feedback        -- per-response thumbs up/down ratings from employees
     EscalationEvent -- audit trail for every automatic escalation
 
 All models use Integer primary keys with a surrogate UUID business key where
 the domain expects a human-readable identifier (ticket_id, document_id, etc.).
 
 Relationships are declared with back_populates for bidirectional navigation.
-All FKs to users.id are nullable so the models work before auth is wired.
+FKs to users.id stay nullable so internal/MCP flows that have no
+authenticated user (e.g. escalation-triggered ticket creation) keep working.
 """
 from __future__ import annotations
 
@@ -27,7 +28,6 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
-    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -52,10 +52,8 @@ class Base(DeclarativeBase):
 # ── Enums ─────────────────────────────────────────────────────────────────────
 
 class UserRole(str, enum.Enum):
-    employee  = "employee"
-    hr_admin  = "hr_admin"
-    it_admin  = "it_admin"
-    superuser = "superuser"
+    employee = "employee"
+    admin    = "admin"
 
 
 class DocumentStatus(str, enum.Enum):
@@ -79,14 +77,21 @@ class TicketStatus(str, enum.Enum):
     closed      = "closed"
 
 
+class FeedbackRating(str, enum.Enum):
+    up   = "up"
+    down = "down"
+
+
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class User(Base):
     """
     An employee or admin account.
 
-    password_hash is stored here so auth can be wired later without
-    a schema migration. The field is nullable until the auth layer exists.
+    password_hash holds the argon2 hash of the user's password. Every user
+    created through POST /auth/signup or the create_admin script has a
+    password_hash set; the column stays nullable at the DB level only to
+    avoid a breaking migration for any pre-auth seed rows.
     """
     __tablename__ = "users"
 
@@ -209,11 +214,13 @@ class Feedback(Base):
     """
     __tablename__ = "feedback"
 
-    id          : Mapped[int]          = mapped_column(Integer, primary_key=True, autoincrement=True)
-    response_id : Mapped[str | None]   = mapped_column(String(255), nullable=True)
-    question    : Mapped[str]          = mapped_column(Text, nullable=False)
-    rating      : Mapped[int]          = mapped_column(SmallInteger, nullable=False)   # 1-5
-    comment     : Mapped[str | None]   = mapped_column(Text, nullable=True)
+    id          : Mapped[int]            = mapped_column(Integer, primary_key=True, autoincrement=True)
+    response_id : Mapped[str | None]     = mapped_column(String(255), nullable=True)
+    question    : Mapped[str]            = mapped_column(Text, nullable=False)
+    rating      : Mapped[FeedbackRating] = mapped_column(
+        Enum(FeedbackRating, name="feedbackrating"), nullable=False
+    )
+    comment     : Mapped[str | None]     = mapped_column(Text, nullable=True)
     created_at  : Mapped[datetime]     = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

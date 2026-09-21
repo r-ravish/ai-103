@@ -24,11 +24,15 @@ import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from app.content_safety import ContentSafetyClient
+from app.deps import require_employee
 from app.foundry_agent import FoundryAgentService
+from db.models import User
+from routes.auth import router as auth_router
+from routes.feedback import router as feedback_router
 from routes.tickets import router as tickets_router
 from routes.onboarding import router as onboarding_router
 
@@ -77,8 +81,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(auth_router)
 app.include_router(tickets_router)
 app.include_router(onboarding_router)
+app.include_router(feedback_router)
 
 
 # ---------------------------------------------------------------------------
@@ -148,12 +154,15 @@ def health() -> dict[str, str]:
 
 
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
-def chat(request: ChatRequest) -> ChatResponse:
+def chat(request: ChatRequest, user: User = Depends(require_employee)) -> ChatResponse:
     """
     Answer an employee question using the persisted Foundry agent.
 
     The agent searches the Azure AI Search knowledge base and synthesises a
     grounded answer. Source-document citations are included in the response.
+
+    Requires an authenticated session (employee or admin role). Returns 401
+    for unauthenticated requests.
 
     Content Safety screening:
       1. User input is screened before being sent to Foundry.

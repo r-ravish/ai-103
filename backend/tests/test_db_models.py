@@ -32,6 +32,7 @@ from db.models import (
     DocumentStatus,
     EscalationEvent,
     Feedback,
+    FeedbackRating,
     Ticket,
     TicketPriority,
     TicketStatus,
@@ -90,7 +91,7 @@ class TestDatabaseModels(unittest.TestCase):
         self.assertIsInstance(user.created_at, datetime)
 
     def test_document_creation_and_relationship(self):
-        user = User(name="Uploader Admin", email="uploader@company.com", role=UserRole.hr_admin)
+        user = User(name="Uploader Admin", email="uploader@company.com", role=UserRole.admin)
         self.session.add(user)
         self.session.flush()
 
@@ -155,7 +156,7 @@ class TestDatabaseModels(unittest.TestCase):
         fb = Feedback(
             response_id="resp-123",
             question="When will direct deposit arrive?",
-            rating=4,
+            rating=FeedbackRating.up,
             comment="Helpful escalation to payroll",
             user_id=user.id,
         )
@@ -168,7 +169,7 @@ class TestDatabaseModels(unittest.TestCase):
         self.assertIn(esc, ticket.escalation_events)
 
         self.assertIsNotNone(fb.id)
-        self.assertEqual(fb.rating, 4)
+        self.assertEqual(fb.rating, FeedbackRating.up)
         self.assertEqual(fb.user.email, "feedback@company.com")
         self.assertIn(fb, user.feedback_list)
 
@@ -187,7 +188,7 @@ class TestDatabaseModels(unittest.TestCase):
         )
         fb = Feedback(
             question="Sample question?",
-            rating=5,
+            rating=FeedbackRating.up,
             user_id=None,
         )
         self.session.add_all([doc, ticket, fb])
