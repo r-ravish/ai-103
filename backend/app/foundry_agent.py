@@ -33,146 +33,197 @@ logger = logging.getLogger(__name__)
 _PROJECT_ENDPOINT: str | None = os.getenv("FOUNDRY_PROJECT_ENDPOINT")
 _AGENT_NAME: str | None = os.getenv("FOUNDRY_AGENT_NAME")
 
-_SEARCH_ENDPOINT: str | None = os.getenv("AZURE_SEARCH_ENDPOINT")
-_SEARCH_ADMIN_KEY: str | None = os.getenv("AZURE_SEARCH_ADMIN_KEY")
-_OPENAI_ENDPOINT: str | None = os.getenv("AZURE_OPENAI_ENDPOINT")
-_OPENAI_API_KEY: str | None = os.getenv("AZURE_OPENAI_API_KEY")
-_OPENAI_API_VERSION: str = os.getenv("AZURE_OPENAI_API_VERSION", "2024-10-21")
-_EMBEDDING_DEPLOYMENT: str = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small")
-
 
 class FoundryAgentService:
-    """Wrapper around Microsoft Foundry agent with direct Azure Search RAG fallback."""
+    """Thin wrapper around the persisted Microsoft Foundry agent."""
     def __init__(self) -> None:
-        self._project = None
-        self._client = None
-        self._aoai_client = None
-        self._search_client = None
+        if not _PROJECT_ENDPOINT or "<" in _PROJECT_ENDPOINT:
+            raise RuntimeError("FOUNDRY_PROJECT_ENDPOINT is missing or still contains a placeholder.")
+        if not _AGENT_NAME:
+            raise RuntimeError("FOUNDRY_AGENT_NAME is missing from environment.")
 
-        if os.getenv("AZURE_CLIENT_ID") and _PROJECT_ENDPOINT and "<" not in _PROJECT_ENDPOINT and _AGENT_NAME:
-            try:
-                logger.info("Attempting to connect to Foundry project: %s agent: %s", _PROJECT_ENDPOINT, _AGENT_NAME)
-                self._project = AIProjectClient(
-                    endpoint=_PROJECT_ENDPOINT,
-                    credential=DefaultAzureCredential(),
-                    allow_preview=True,
-                )
-                self._client = self._project.get_openai_client(agent_name=_AGENT_NAME)
-            except Exception as exc:
-                logger.warning("Foundry project client init warning (will use RAG fallback): %s", exc)
+        logger.info("Connecting to Foundry project: %s  agent: %s", _PROJECT_ENDPOINT, _AGENT_NAME)
 
-        if _OPENAI_ENDPOINT and _OPENAI_API_KEY and _SEARCH_ENDPOINT and _SEARCH_ADMIN_KEY:
-            try:
-                from openai import AzureOpenAI
-                from azure.core.credentials import AzureKeyCredential
-                from azure.search.documents import SearchClient
+        self._project = AIProjectClient(
+            endpoint=_PROJECT_ENDPOINT,
+            credential=DefaultAzureCredential(),
+            allow_preview=True,
+        )
+        self._client = self._project.get_openai_client(agent_name=_AGENT_NAME)
 
-                self._aoai_client = AzureOpenAI(
-                    azure_endpoint=_OPENAI_ENDPOINT,
-                    api_key=_OPENAI_API_KEY,
-                    api_version=_OPENAI_API_VERSION,
-                )
-                self._search_client = SearchClient(
-                    endpoint=_SEARCH_ENDPOINT,
-                    index_name="enterprise-knowledge-index",
-                    credential=AzureKeyCredential(_SEARCH_ADMIN_KEY),
-                )
-                logger.info("Initialised Azure Search RAG fallback client.")
-            except Exception as exc:
-                logger.warning("Could not initialise Azure Search RAG fallback: %s", exc)
+    @staticmethod
+    def _detect_knowledge_gap(answer: str) -> tuple[bool, str | None]:
+        """Detect knowledge gaps and clearly out-of-scope responses."""
+
+        normalized = " ".join(answer.lower().split())
+
+        out_of_scope_markers = (
+            "outside the scope",
+            "outside the scope of",
+            "out of scope",
+            "not related to company policies",
+            "not related to company policy",
+            "not related to the company",
+            "outside the company policy knowledge base",
+            "outside the knowledge base",
+            "not something i can help with",
+        )
+
+        knowledge_gap_markers = (
+            "not available in the knowledge base",
+            "not available in the current knowledge base",
+            "not available in the knowledge base documents",
+            "not available in the current knowledge base documents",
+            "not found in the knowledge base",
+            "cannot find that information in the knowledge base",
+            "can't find that information in the knowledge base",
+            "not documented in the knowledge base",
+            "not documented in the available documents",
+            "not explicitly documented",
+            "not currently documented",
+            "does not contain sufficient information",
+            "do not contain sufficient information",
+            "does not contain the information",
+            "do not contain the information",
+            "does not contain specific",
+            "do not contain specific",
+            "does not contain a specific",
+            "do not contain a specific",
+            "does not contain",
+            "do not contain",
+            "no information on",
+            "no information about",
+            "information is not available",
+            "i don't have enough information",
+            "i do not have enough information",
+            "i don't have that information",
+            "i do not have that information",
+            "i can't find",
+            "i cannot find",
+        )
+
+        if any(marker in normalized for marker in out_of_scope_markers):
+            return True, "out_of_scope"
+
+        if any(marker in normalized for marker in knowledge_gap_markers):
+            return True, "knowledge_gap"
+
+        return False, None
 
     def ask(self, question: str) -> dict[str, Any]:
         """
-        Send *question* to the Foundry agent (or RAG fallback) and return a structured reply.
+        Send *question* to the Foundry agent and return a structured reply.
+
+        Returns
+        -------
+        dict with keys:
+          ``answer``      – plain-text response from the agent
+          ``citations``   – list of unique source-document metadata dicts
+          ``response_id`` – Foundry response ID (useful for debugging)
         """
-        logger.info("Sending question: %r", question)
-        if self._client is not None:
-            try:
-                response = self._client.responses.create(input=question)
-                response = self._approve_mcp_requests(response)
-                raw_answer = response.output_text or ""
-                answer = re.sub(r"\u3010[^\u3011]*\u3011", "", raw_answer).strip()
+        logger.info("Sending question to agent: %r", question)
+        response = self._client.responses.create(input=question)
 
-                _GAP_MARKERS = (
-                    "does not contain a specific",
-                    "does not currently contain",
-                    "does not contain sufficient information",
-                    "no specific",
-                    "not documented",
-                    "not explicitly documented",
-                    "no information",
-                    "cannot find",
-                    "not available in",
-                )
-                if any(marker in answer.lower() for marker in _GAP_MARKERS):
-                    citations: list[dict[str, Any]] = []
-                else:
-                    citations = self._extract_citations(response)
-                return {"answer": answer, "citations": citations, "response_id": getattr(response, "id", "foundry-1")}
-            except Exception as exc:
-                logger.warning("Foundry agent call failed (%s); falling back to direct Azure Search RAG.", exc)
+        # If the agent needs to call an MCP tool (e.g. create_support_ticket),
+        # it will pause and emit mcp_approval_request items.  Approve only the
+        # two known support-ticket tools and re-submit so the agent can finish.
+        response = self._approve_mcp_requests(response)
 
-        return self._rag_ask(question)
+        # Capture any MCP action that occurred during this request.
+        action_taken, action_type, ticket_id = self._extract_tool_action(response)
 
-    def _rag_ask(self, question: str) -> dict[str, Any]:
-        """Direct vector retrieval + answer synthesis from Azure AI Search RAG."""
-        if not self._aoai_client or not self._search_client:
-            raise RuntimeError("Neither Foundry agent nor Azure Search RAG credentials are available.")
+        raw_answer = response.output_text or ""
+        # Strip inline citation markers like 【4:0†work-from-home-policy.md】
+        # so the frontend receives clean prose and uses the structured
+        # citations array instead.
+        answer = re.sub(r"\u3010[^\u3011]*\u3011", "", raw_answer).strip()
 
-        from azure.search.documents.models import VectorizedQuery
+        # ------------------------------------------------------------------
+        # Knowledge-gap guard.
+        #
+        # Even when the model answers "I don't have that information", the
+        # retrieval step may still return chunks and attach url_citation
+        # annotations that reference whatever vaguely related docs it found.
+        # We check the answer text for phrases that signal a genuine gap and
+        # suppress citations in that case, so the frontend never shows
+        # misleading source references alongside a "not found" reply.
+        # ------------------------------------------------------------------
+        is_knowledge_gap, gap_reason = self._detect_knowledge_gap(answer)
 
-        emb_resp = self._aoai_client.embeddings.create(
-            model=_EMBEDDING_DEPLOYMENT,
-            input=[question],
-        )
-        query_vector = emb_resp.data[0].embedding
+        if is_knowledge_gap:
+            logger.info("Knowledge gap detected — suppressing citations.")
+            citations: list[dict[str, Any]] = []
+            escalation_required = True
+            escalation_reason = gap_reason
 
-        vector_query = VectorizedQuery(
-            vector=query_vector,
-            k_nearest_neighbors=5,
-            fields="embedding",
-        )
-        search_results = list(
-            self._search_client.search(
-                search_text=None,
-                vector_queries=[vector_query],
-                select=["title", "content", "source_file", "document_id", "chunk_index"],
-                top=5,
+            # ── Trigger automatic MCP escalation ──────────────────────────
+            # Instruct the persisted agent to call create_support_ticket so
+            # the gap is tracked without requiring any manual intervention.
+            escalation_instruction = (
+                "The user's question could not be answered reliably from the "
+                "knowledge base. You must now escalate this request by calling "
+                "the `create_support_ticket` MCP tool. "
+                "Do not guess or invent an answer. "
+                "Create a medium-priority ticket with the title "
+                "'Knowledge gap escalation' and use the original user question "
+                f"as the ticket description: {question!r}. "
+                "After the tool succeeds, provide a brief confirmation."
             )
+
+            logger.info("Triggering MCP escalation for knowledge gap.")
+            escalation_response = self._client.responses.create(
+                previous_response_id=response.id,
+                input=escalation_instruction,
+            )
+
+            # Approve only the whitelisted create_support_ticket call.
+            escalation_response = self._approve_mcp_requests(escalation_response)
+
+            _, _, escalation_ticket_id = self._extract_tool_action(
+                escalation_response
+            )
+            ticket_id = escalation_ticket_id
+
+            if ticket_id:
+                logger.info("Escalation ticket created: %s", ticket_id)
+
+                action_taken = True
+                action_type = "escalation"
+            else:
+                logger.error(
+                    "Escalation was required, but the escalation ticket could not be created."
+                )
+
+                action_taken = False
+                action_type = "escalation_failed"
+
+                answer = (
+                    "I don't have enough information to answer this reliably, "
+                    "and I was unable to create the escalation ticket right now. "
+                    "Please contact HR or your manager directly for assistance."
+                )
+
+        else:
+            citations = self._extract_citations(response)
+            escalation_required = False
+            escalation_reason = None
+
+        logger.info(
+            "Agent replied (%d chars, %d citations, escalation_required=%s, action_taken=%s)",
+            len(answer),
+            len(citations),
+            escalation_required,
+            action_taken,
         )
-
-        if not search_results or search_results[0].get("@search.score", 0) < 0.60:
-            return {
-                "answer": "I couldn't find specific policy information regarding your question in the enterprise knowledge base.",
-                "citations": [],
-                "response_id": "rag-gap",
-            }
-
-        top_score = search_results[0]["@search.score"]
-        valid_chunks = [
-            r for r in search_results if r.get("@search.score", 0) >= max(0.60, top_score - 0.12)
-        ]
-
-        sections: list[str] = []
-        seen_files: dict[str, dict[str, str]] = {}
-
-        for r in valid_chunks:
-            content = (r.get("content") or "").strip()
-            if content and content not in sections:
-                sections.append(content)
-            source_file = r.get("source_file") or ""
-            if source_file and source_file not in seen_files:
-                seen_files[source_file] = {
-                    "document_id": str(r.get("document_id") or ""),
-                    "title": str(r.get("title") or ""),
-                    "source_file": source_file,
-                }
-
-        answer = "\n\n".join(sections)
         return {
             "answer": answer,
-            "citations": list(seen_files.values()),
-            "response_id": "rag-search-1",
+            "citations": citations,
+            "response_id": response.id,
+            "escalation_required": escalation_required,
+            "escalation_reason": escalation_reason,
+            "action_taken": action_taken,
+            "action_type": action_type,
+            "ticket_id": ticket_id,
         }
 
     def _approve_mcp_requests(self, response: Any) -> Any:
@@ -242,6 +293,52 @@ class FoundryAgentService:
             previous_response_id=response.id,
             input=approval_inputs,
         )
+
+    @staticmethod
+    def _extract_tool_action(response: Any) -> tuple[bool, str | None, str | None]:
+        """
+        Extract structured action metadata from MCP tool calls.
+
+        Returns (action_taken, action_type, ticket_id).
+        """
+        try:
+            raw: dict[str, Any] = response.model_dump()
+        except Exception:
+            logger.warning(
+                "Could not serialise response while extracting tool action.",
+                exc_info=True,
+            )
+            return False, None, None
+
+        action_taken = False
+        action_type: str | None = None
+        ticket_id: str | None = None
+
+        for item in raw.get("output", []):
+            if item.get("type") != "mcp_call":
+                continue
+
+            tool_name = item.get("name")
+
+            if tool_name == "create_support_ticket":
+                action_taken = True
+                action_type = "support_ticket"
+
+                output_text = str(item.get("output") or "")
+                match = re.search(r"\bTKT-[A-Z0-9-]+\b", output_text)
+                if match:
+                    ticket_id = match.group(0)
+
+            elif tool_name == "get_support_ticket":
+                action_taken = True
+                action_type = "support_ticket_lookup"
+
+                output_text = str(item.get("output") or "")
+                match = re.search(r"\bTKT-[A-Z0-9-]+\b", output_text)
+                if match and not ticket_id:
+                    ticket_id = match.group(0)
+
+        return action_taken, action_type, ticket_id
 
     def close(self) -> None:
         """Release the underlying Foundry project client."""

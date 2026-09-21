@@ -112,6 +112,29 @@ class ChatResponse(BaseModel):
         default_factory=list,
         description="Source documents the agent retrieved to produce the answer.",
     )
+    escalation_required: bool = Field(
+        default=False,
+        description=(
+            "True when the agent could not find sufficient grounded evidence and the "
+            "question should be escalated to a human reviewer."
+        ),
+    )
+    escalation_reason: str | None = Field(
+        default=None,
+        description="Machine-readable reason for escalation (e.g. 'knowledge_gap'), or None.",
+    )
+    action_taken: bool = Field(
+        default=False,
+        description="True when a backend action (e.g. ticket creation) was successfully performed.",
+    )
+    action_type: str | None = Field(
+        default=None,
+        description="Type of backend action performed (e.g. 'escalation'), or None.",
+    )
+    ticket_id: str | None = Field(
+        default=None,
+        description="Support ticket ID created during escalation, or None.",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -177,9 +200,19 @@ def chat(request: ChatRequest) -> ChatResponse:
             return ChatResponse(
                 answer=output_result.safe_response,
                 citations=[],
+                escalation_required=False,
+                escalation_reason=None,
+                action_taken=False,
+                action_type=None,
+                ticket_id=None,
             )
 
     return ChatResponse(
         answer=result["answer"],
         citations=[Citation(**c) for c in result.get("citations", [])],
+        escalation_required=result.get("escalation_required", False),
+        escalation_reason=result.get("escalation_reason"),
+        action_taken=result.get("action_taken", False),
+        action_type=result.get("action_type"),
+        ticket_id=result.get("ticket_id"),
     )
