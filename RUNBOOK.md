@@ -219,6 +219,58 @@ When demonstrating the system to stakeholders or teammates, follow this sequence
 
 ---
 
+## 4.5. Authentication & RBAC
+
+All application endpoints now require an authenticated session. Sessions are
+JWTs carried in an HttpOnly `access_token` cookie — never in localStorage or
+a JSON response body.
+
+### Roles
+| Role | Can access |
+|---|---|
+| `employee` (default on signup) | `POST /chat`, `POST /feedback`, `POST/GET /internal/tickets` |
+| `admin` | Everything `employee` can, plus `/onboarding/*` and `/admin/*` |
+
+### Creating accounts
+```bash
+# Self-service signup — always creates role="employee". There is no way
+# to request "admin" through this endpoint.
+curl -c cookies.txt -X POST http://localhost:8000/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Alice Employee", "email": "alice@company.com", "password": "correct-horse-battery"}'
+
+# Admin accounts are provisioned out-of-band (never through signup):
+cd backend
+python scripts/create_admin.py --name "Ops Admin" --email admin@company.com
+```
+
+### Logging in / using a session
+```bash
+curl -c cookies.txt -X POST http://localhost:8000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "alice@company.com", "password": "correct-horse-battery"}'
+
+# Re-use the cookie jar on subsequent requests:
+curl -b cookies.txt http://localhost:8000/auth/me
+curl -b cookies.txt -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" -d '{"question": "What is the leave policy?"}'
+
+curl -b cookies.txt -X POST http://localhost:8000/auth/logout
+```
+
+### Expected status codes
+- No/invalid session → `401 Unauthorized`
+- Authenticated but wrong role (e.g. employee hitting `/onboarding/upload`) → `403 Forbidden`
+- Authenticated with the right role → `200`/`201`
+
+### Backend auth/RBAC tests
+```bash
+cd backend
+python -m pytest tests/test_auth.py tests/test_rbac.py tests/test_tickets.py tests/test_feedback.py -v
+```
+
+---
+
 ## 5. Standalone Testing & Diagnostic Commands
 
 Run these whenever you want to test individual modules without the web UI:

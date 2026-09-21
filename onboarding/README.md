@@ -40,7 +40,11 @@ When a document is uploaded through `POST /onboarding/upload`:
 
 After ingestion, the document is **immediately searchable** by the agent via `POST /chat`.
 
-`GET /onboarding/documents` and `GET /onboarding/status/{document_id}` query the live index to give an admin real-time visibility into what is indexed and how many chunks each document produced.
+`GET /onboarding/documents` and `GET /onboarding/status/{document_id}` read from PostgreSQL (the `documents` table), the source of truth for document metadata — it survives backend restarts. `GET /onboarding/status/{document_id}` additionally enriches the response with live chunk-level detail from Azure AI Search when available.
+
+`DELETE /onboarding/documents/{document_id}` performs a real deletion: every indexed chunk for that document is removed from Azure AI Search, the original uploaded file is removed from disk, and the PostgreSQL row is deleted — in that order, so a failure at any step is reported rather than silently dropped.
+
+**All `/onboarding/*` endpoints require an authenticated admin session.** See [Authentication & RBAC](../RUNBOOK.md#45-authentication--rbac) in the root runbook — employees receive `403 Forbidden`, unauthenticated callers receive `401 Unauthorized`.
 
 ---
 
@@ -65,10 +69,15 @@ Client (admin)
      └── 6. Index          — Azure AI Search: enterprise-knowledge-index
 
      ▼ GET /onboarding/status/{document_id}
-     └── Live query to Azure AI Search → returns chunk-level metadata
+     └── PostgreSQL row + live Azure AI Search chunk-level metadata
 
      ▼ GET /onboarding/documents
-     └── Live query to Azure AI Search → one row per distinct document_id
+     └── PostgreSQL — one row per document, most recently uploaded first
+
+     ▼ DELETE /onboarding/documents/{document_id}
+     ├── 1. Delete every indexed chunk (document_id_000, _001, ...) from Azure AI Search
+     ├── 2. Delete the original uploaded file from disk
+     └── 3. Delete the Document row from PostgreSQL
 ```
 
 ---
@@ -128,12 +137,11 @@ List all documents currently indexed in `enterprise-knowledge-index`.
       "uploaded_at": "2026-09-20T10:00:00Z"
     }
   ],
-  "total": 5,
-  "source": "live"
+  "total": 5
 }
 ```
 
-The `source` field is `"live"` when the data comes from Azure AI Search, or `"fallback"` when Azure credentials are not configured (local dev without `.env`).
+`status` is one of `pending`, `ingesting`, `ingested`, `failed`, `deleted` — a document is only reported as `ingested` once the Azure AI Search upload has actually succeeded.
 
 ---
 
@@ -155,7 +163,6 @@ Per-document ingestion status with full chunk-level detail.
   "uploaded_at": "2026-09-20T10:00:00Z",
   "permission_tags": ["all-employees"],
   "document_type": "policy",
-  "source": "live",
   "chunks": [
     {
       "id": "leave-policy_000",
@@ -171,7 +178,34 @@ Per-document ingestion status with full chunk-level detail.
 
 | HTTP | Reason |
 |---|---|
-| `404` | Document not found in the index |
+| `404` | Document not found in PostgreSQL |
+
+---
+
+### `DELETE /onboarding/documents/{document_id}`
+
+Permanently delete a document: every Azure AI Search chunk, the uploaded
+file, and the PostgreSQL row.
+
+**Example:** `DELETE /onboarding/documents/leave-policy`
+
+**Response** — `200 OK`
+
+```json
+{
+  "document_id": "leave-policy",
+  "deleted": true,
+  "chunks_deleted": 4
+}
+```
+
+After deletion, `GET /onboarding/documents` no longer lists the document,
+and `POST /chat` questions unique to that document can no longer retrieve it.
+
+| HTTP | Reason |
+|---|---|
+| `404` | Document not found in PostgreSQL |
+| `500` | Azure AI Search chunk deletion or file removal failed — the PostgreSQL row is **not** deleted in this case, so the failure is visible instead of silently succeeding |
 
 ---
 
@@ -189,12 +223,17 @@ Per-document ingestion status with full chunk-level detail.
 ## How to upload a document (curl)
 
 ```bash
+# Log in as an admin first — every /onboarding/* call needs the session cookie.
+curl -c cookies.txt -X POST https://<backend-url>/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@company.com", "password": "<admin-password>"}'
+
 # Upload a Markdown policy file
-curl -X POST https://<backend-url>/onboarding/upload \
+curl -b cookies.txt -X POST https://<backend-url>/onboarding/upload \
   -F "file=@docs/pilot-documents/leave-policy.md"
 
 # Upload a PDF
-curl -X POST https://<backend-url>/onboarding/upload \
+curl -b cookies.txt -X POST https://<backend-url>/onboarding/upload \
   -F "file=@my-policy.pdf"
 ```
 
@@ -208,11 +247,14 @@ Using the **Swagger UI** (available at `https://<backend-url>/docs`):
 ## How to verify ingestion status
 
 ```bash
-# Check status of a specific document
-curl https://<backend-url>/onboarding/status/leave-policy
+# Check status of a specific document (uses the cookie jar from the login step above)
+curl -b cookies.txt https://<backend-url>/onboarding/status/leave-policy
 
-# List all indexed documents
-curl https://<backend-url>/onboarding/documents
+# List all onboarded documents
+curl -b cookies.txt https://<backend-url>/onboarding/documents
+
+# Delete a document (chunks + file + DB row)
+curl -b cookies.txt -X DELETE https://<backend-url>/onboarding/documents/leave-policy
 
 # General health check
 curl https://<backend-url>/health

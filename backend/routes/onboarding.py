@@ -1,37 +1,48 @@
 """
 backend/routes/onboarding.py
 ------------------------------
-Document onboarding and ingestion-status endpoints.
+Document onboarding, listing, status, and deletion — all admin-only.
 
-Day 4 upgrade: the document list and per-document status are now backed
-by a live query to Azure AI Search (enterprise-knowledge-index) rather
-than an in-memory dictionary.  This means:
+PostgreSQL (db.models.Document) is now the source of truth for document
+metadata. The previous in-memory store did not survive a process restart;
+every document uploaded through POST /onboarding/upload is now written to
+the documents table, and GET /onboarding/documents reads from it.
 
-  • Pilot documents ingested by the Day 1 script appear immediately.
-  • Any document uploaded through POST /onboarding/upload appears in
-    GET /onboarding/documents as soon as it is indexed.
-  • GET /onboarding/status/{document_id} shows real chunk-level metadata.
+Ingestion flow:
+    POST /onboarding/upload
+        -> save file to disk
+        -> chunk + embed
+        -> create Document row (status=ingesting)
+        -> upload chunks to Azure AI Search
+        -> status=ingested (chunks_count set)      on success
+        -> status=failed                            on any failure
 
-The in-memory store is kept only as a fallback for the case where Azure AI
-Search credentials are not configured (local development without .env).
+Deletion flow (DELETE /onboarding/documents/{document_id}):
+        -> look up Document row (404 if missing)
+        -> delete every indexed chunk for that document_id from Azure AI Search
+        -> delete the original uploaded file from disk
+        -> delete the Document row
+        -> if any step fails, the row is NOT deleted and an error is raised —
+           deletion never "silently succeeds" client-side only.
 
-Endpoints
-─────────
-POST /onboarding/upload                  — upload + ingest a document
-GET  /onboarding/documents               — list all indexed documents (live)
-GET  /onboarding/status/{document_id}    — per-document ingestion status (live)
+All routes require an authenticated admin session (require_admin).
 """
 from __future__ import annotations
 
 import logging
 import os
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.deps import require_admin
+from db.database import get_db
+from db.models import Document, DocumentStatus, User
 
 logger = logging.getLogger(__name__)
 
@@ -51,58 +62,8 @@ from ingest_pilot_documents import (  # noqa: E402
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
-# ---------------------------------------------------------------------------
-# Fallback in-memory store (used when Azure Search is not reachable or
-# when the pilot documents have not been ingested yet).
-# ---------------------------------------------------------------------------
-_PILOT_DOCS_FALLBACK: dict[str, dict[str, Any]] = {
-    "employee-benefits.md": {
-        "document_id": "employee-benefits",
-        "filename": "employee-benefits.md",
-        "title": "Retirement & Employee Benefits",
-        "status": "ingested",
-        "chunks_count": 4,
-        "uploaded_at": "2026-09-20T10:00:00Z",
-    },
-    "leave-policy.md": {
-        "document_id": "leave-policy",
-        "filename": "leave-policy.md",
-        "title": "Employee Leave Policy",
-        "status": "ingested",
-        "chunks_count": 4,
-        "uploaded_at": "2026-09-20T10:00:00Z",
-    },
-    "reimbursement-policy.md": {
-        "document_id": "reimbursement-policy",
-        "filename": "reimbursement-policy.md",
-        "title": "Employee Expense Reimbursement Policy",
-        "status": "ingested",
-        "chunks_count": 4,
-        "uploaded_at": "2026-09-20T10:00:00Z",
-    },
-    "work-from-home-policy.md": {
-        "document_id": "work-from-home-policy",
-        "filename": "work-from-home-policy.md",
-        "title": "Work From Home Policy",
-        "status": "ingested",
-        "chunks_count": 3,
-        "uploaded_at": "2026-09-20T10:00:00Z",
-    },
-    "it-security-policy.md": {
-        "document_id": "it-security-policy",
-        "filename": "it-security-policy.md",
-        "title": "Information Technology Security Policy",
-        "status": "ingested",
-        "chunks_count": 4,
-        "uploaded_at": "2026-09-20T10:00:00Z",
-    },
-}
-
-# Runtime upload store (tracks documents uploaded in the current process
-# session, used as a merge source when Azure Search is unreachable).
-_session_uploads: dict[str, dict[str, Any]] = {}
-
 INDEX_NAME = "enterprise-knowledge-index"
+DOCS_DIR = Path("docs/pilot-documents")
 
 
 # ---------------------------------------------------------------------------
@@ -122,55 +83,6 @@ def _search_client():
         index_name=INDEX_NAME,
         credential=AzureKeyCredential(key),
     )
-
-
-def _list_documents_from_index() -> list[dict[str, Any]]:
-    """
-    Query enterprise-knowledge-index and return one summary dict per
-    distinct document_id, ordered by first ingested_at descending.
-
-    Returns an empty list if Azure Search is not reachable.
-    """
-    client = _search_client()
-    if client is None:
-        return []
-
-    try:
-        results = client.search(
-            search_text="*",
-            select=[
-                "document_id",
-                "source_file",
-                "title",
-                "document_type",
-                "ingested_at",
-                "chunk_index",
-            ],
-            order_by=["document_id asc", "chunk_index asc"],
-            top=1000,
-        )
-
-        docs: dict[str, dict[str, Any]] = {}
-        for item in results:
-            doc_id = item.get("document_id", "")
-            if not doc_id:
-                continue
-            if doc_id not in docs:
-                docs[doc_id] = {
-                    "document_id": doc_id,
-                    "filename": item.get("source_file", f"{doc_id}.md"),
-                    "title": item.get("title", doc_id.replace("-", " ").title()),
-                    "status": "ingested",
-                    "chunks_count": 0,
-                    "uploaded_at": str(item.get("ingested_at", "")),
-                }
-            docs[doc_id]["chunks_count"] += 1
-
-        return list(docs.values())
-
-    except Exception as exc:
-        logger.warning("Failed to query Azure AI Search: %s", exc)
-        return []
 
 
 def _fetch_chunks_for_doc(document_id: str) -> list[dict[str, Any]]:
@@ -207,11 +119,45 @@ def _fetch_chunks_for_doc(document_id: str) -> list[dict[str, Any]]:
         return []
 
 
+def _delete_chunks_from_index(document_id: str) -> int:
+    """
+    Delete every indexed chunk belonging to *document_id* (e.g.
+    document_id_000, document_id_001, ...) from Azure AI Search.
+
+    Returns the number of chunks deleted. Raises RuntimeError if Azure
+    Search is configured but the delete call fails, so callers never
+    report a false success.
+    """
+    client = _search_client()
+    if client is None:
+        # Azure Search not configured (local dev) — nothing to clean up there.
+        return 0
+
+    chunks = _fetch_chunks_for_doc(document_id)
+    if not chunks:
+        return 0
+
+    keys = [{"id": c["id"]} for c in chunks if c.get("id")]
+    if not keys:
+        return 0
+
+    try:
+        result = client.delete_documents(documents=keys)
+    except Exception as exc:
+        raise RuntimeError(f"Failed to delete chunks for document_id={document_id!r} from Azure AI Search: {exc}") from exc
+
+    failed = [r.key for r in result if not r.succeeded]
+    if failed:
+        raise RuntimeError(f"Azure AI Search refused to delete chunk id(s) {failed} for document_id={document_id!r}.")
+
+    return len(keys)
+
+
 # ---------------------------------------------------------------------------
 # Pydantic schemas
 # ---------------------------------------------------------------------------
 
-class DocumentStatus(BaseModel):
+class DocumentStatusResponse(BaseModel):
     document_id: str
     filename: str
     title: str
@@ -221,9 +167,8 @@ class DocumentStatus(BaseModel):
 
 
 class DocumentListResponse(BaseModel):
-    documents: list[DocumentStatus]
+    documents: list[DocumentStatusResponse]
     total: int
-    source: str  # "live" | "fallback"
 
 
 class ChunkDetail(BaseModel):
@@ -245,7 +190,23 @@ class DocumentStatusDetailResponse(BaseModel):
     permission_tags: list[str]
     document_type: str
     chunks: list[ChunkDetail]
-    source: str  # "live" | "fallback"
+
+
+class DeleteResponse(BaseModel):
+    document_id: str
+    deleted: bool
+    chunks_deleted: int
+
+
+def _to_response(doc: Document) -> DocumentStatusResponse:
+    return DocumentStatusResponse(
+        document_id=doc.document_id,
+        filename=doc.filename,
+        title=doc.title or doc.document_id.replace("-", " ").replace("_", " ").title(),
+        status=doc.status.value,
+        chunks_count=doc.chunks_count or 0,
+        uploaded_at=doc.uploaded_at.isoformat(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -255,42 +216,20 @@ class DocumentStatusDetailResponse(BaseModel):
 @router.get(
     "/documents",
     response_model=DocumentListResponse,
-    summary="List all ingested documents",
-    description=(
-        "Returns all documents currently indexed in enterprise-knowledge-index "
-        "with real chunk counts pulled live from Azure AI Search. Falls back to "
-        "a static list of pilot documents when Azure credentials are not available."
-    ),
+    summary="List all onboarded documents",
+    description="Returns all document metadata persisted in PostgreSQL, most recently uploaded first.",
 )
-def list_documents() -> DocumentListResponse:
-    """Return all ingested documents — live from Azure AI Search."""
-    live_docs = _list_documents_from_index()
+async def list_documents(
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> DocumentListResponse:
+    """Return all documents tracked in PostgreSQL — the single source of truth."""
+    rows = (
+        await db.execute(select(Document).order_by(Document.uploaded_at.desc()))
+    ).scalars().all()
 
-    if live_docs:
-        # Merge session uploads so newly uploaded docs appear even before
-        # a full Azure Search query cycle completes.
-        existing_ids = {d["document_id"] for d in live_docs}
-        for doc in _session_uploads.values():
-            if doc["document_id"] not in existing_ids:
-                live_docs.append(doc)
-
-        return DocumentListResponse(
-            documents=[DocumentStatus(**d) for d in live_docs],
-            total=len(live_docs),
-            source="live",
-        )
-
-    # Fallback: merge pilot defaults + session uploads
-    merged = {**_PILOT_DOCS_FALLBACK}
-    for key, doc in _session_uploads.items():
-        merged[doc["filename"]] = doc
-
-    docs = list(merged.values())
-    return DocumentListResponse(
-        documents=[DocumentStatus(**d) for d in docs],
-        total=len(docs),
-        source="fallback",
-    )
+    docs = [_to_response(d) for d in rows]
+    return DocumentListResponse(documents=docs, total=len(docs))
 
 
 @router.get(
@@ -298,46 +237,24 @@ def list_documents() -> DocumentListResponse:
     response_model=DocumentStatusDetailResponse,
     summary="Get ingestion status for a specific document",
     description=(
-        "Returns detailed ingestion status for a single document by its document_id, "
-        "including all indexed chunks with their titles, content previews, and metadata. "
-        "Queries enterprise-knowledge-index live. Returns 404 if the document is not found."
+        "Returns the persisted status for a document plus (when available) live "
+        "chunk-level detail from Azure AI Search. Returns 404 if the document is "
+        "not known to PostgreSQL."
     ),
 )
-def get_document_status(document_id: str) -> DocumentStatusDetailResponse:
-    """Per-document ingestion status — live chunk-level detail from Azure AI Search."""
+async def get_document_status(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> DocumentStatusDetailResponse:
+    """Per-document ingestion status — persisted status + live chunk detail."""
+    doc = (await db.execute(select(Document).where(Document.document_id == document_id))).scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"No document found with document_id={document_id!r}.")
+
     chunks = _fetch_chunks_for_doc(document_id)
-
-    if not chunks:
-        # Check session uploads as a last resort
-        for doc in _session_uploads.values():
-            if doc["document_id"] == document_id:
-                return DocumentStatusDetailResponse(
-                    document_id=document_id,
-                    filename=doc["filename"],
-                    title=doc["title"],
-                    status=doc["status"],
-                    chunks_count=doc["chunks_count"],
-                    uploaded_at=doc["uploaded_at"],
-                    permission_tags=["all-employees"],
-                    document_type="policy",
-                    chunks=[],
-                    source="session",
-                )
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"No indexed chunks found for document_id='{document_id}'. "
-                "The document may not have been ingested yet, or Azure AI Search "
-                "may not be reachable."
-            ),
-        )
-
-    first = chunks[0]
-    title = first.get("title", document_id.replace("-", " ").title())
-    source_file = first.get("source_file", f"{document_id}.md")
-    ingested_at = str(first.get("ingested_at", ""))
-    permission_tags = first.get("permission_tags") or ["all-employees"]
-    document_type = first.get("document_type", "policy")
+    permission_tags = (chunks[0].get("permission_tags") if chunks else None) or ["all-employees"]
+    document_type = (chunks[0].get("document_type") if chunks else None) or "policy"
 
     chunk_details = [
         ChunkDetail(
@@ -345,38 +262,43 @@ def get_document_status(document_id: str) -> DocumentStatusDetailResponse:
             chunk_index=c.get("chunk_index", i),
             title=c.get("title", ""),
             content_preview=(c.get("content", "")[:150] + "…") if c.get("content") else "",
-            source_file=c.get("source_file", source_file),
-            ingested_at=str(c.get("ingested_at", ingested_at)),
+            source_file=c.get("source_file", doc.filename),
+            ingested_at=str(c.get("ingested_at", doc.uploaded_at.isoformat())),
         )
         for i, c in enumerate(chunks)
     ]
 
     return DocumentStatusDetailResponse(
-        document_id=document_id,
-        filename=source_file,
-        title=title,
-        status="ingested",
-        chunks_count=len(chunks),
-        uploaded_at=ingested_at,
+        document_id=doc.document_id,
+        filename=doc.filename,
+        title=doc.title or doc.document_id,
+        status=doc.status.value,
+        chunks_count=doc.chunks_count or len(chunk_details),
+        uploaded_at=doc.uploaded_at.isoformat(),
         permission_tags=permission_tags,
         document_type=document_type,
         chunks=chunk_details,
-        source="live",
     )
 
 
 @router.post(
     "/upload",
-    response_model=DocumentStatus,
+    response_model=DocumentStatusResponse,
     summary="Upload and ingest a document",
     description=(
         "Accepts a document upload (.md, .txt, .pdf, .docx), chunks it, generates "
         "embeddings via Azure OpenAI text-embedding-3-small, and indexes all chunks "
-        "into enterprise-knowledge-index using the 11-field ingestion contract."
+        "into enterprise-knowledge-index using the 11-field ingestion contract. "
+        "Only reports status=ingested once the Azure AI Search upload has actually "
+        "succeeded; failures are persisted as status=failed."
     ),
 )
-async def upload_document(file: UploadFile = File(...)) -> DocumentStatus:
-    """Upload a new policy document, chunk it, embed it, and push to Azure AI Search."""
+async def upload_document(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+) -> DocumentStatusResponse:
+    """Upload a new policy document, chunk it, embed it, and push it to Azure AI Search."""
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file selected or invalid filename.")
 
@@ -393,13 +315,31 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentStatus:
     if not content:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-    # Write to a temp location for the script-based chunker
-    dest_dir = Path("docs/pilot-documents")
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    target_path = dest_dir / filename
+    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    target_path = DOCS_DIR / filename
     target_path.write_bytes(content)
 
     doc_id = target_path.stem
+
+    # Upsert the Document row up front so a failure is still visible/tracked.
+    existing = (await db.execute(select(Document).where(Document.document_id == doc_id))).scalar_one_or_none()
+    if existing is not None:
+        doc_row = existing
+        doc_row.filename = filename
+        doc_row.storage_path = str(target_path)
+        doc_row.status = DocumentStatus.ingesting
+        doc_row.uploaded_by_id = admin.id
+    else:
+        doc_row = Document(
+            document_id=doc_id,
+            filename=filename,
+            title=doc_id.replace("-", " ").replace("_", " ").title(),
+            status=DocumentStatus.ingesting,
+            storage_path=str(target_path),
+            uploaded_by_id=admin.id,
+        )
+        db.add(doc_row)
+    await db.flush()
 
     try:
         from openai import AzureOpenAI
@@ -407,7 +347,6 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentStatus:
         from azure.search.documents import SearchClient as _SC
 
         records = build_chunks_for_file(target_path)
-
         if not records:
             raise ValueError("Document produced no chunks after parsing.")
 
@@ -432,26 +371,64 @@ async def upload_document(file: UploadFile = File(...)) -> DocumentStatus:
         embed_records(aoai_client, records)
         upload_records(search_client_inst, records)
 
-        uploaded_at = datetime.now(timezone.utc).isoformat()
-        status_info: dict[str, Any] = {
-            "document_id": doc_id,
-            "filename": filename,
-            "title": records[0]["title"] if records else doc_id.replace("-", " ").title(),
-            "status": "ingested",
-            "chunks_count": len(records),
-            "uploaded_at": uploaded_at,
-        }
-        # Track in session store so the document appears immediately in list
-        _session_uploads[filename] = status_info
+        # Only now — after Azure AI Search has actually accepted the chunks —
+        # do we mark the document as ingested.
+        doc_row.title = records[0]["title"] if records else doc_row.title
+        doc_row.status = DocumentStatus.ingested
+        doc_row.chunks_count = len(records)
+        await db.flush()
+        await db.refresh(doc_row)
 
-        logger.info(
-            "Uploaded and indexed %d chunks for document_id=%r", len(records), doc_id
-        )
-        return DocumentStatus(**status_info)
+        logger.info("Uploaded and indexed %d chunks for document_id=%r", len(records), doc_id)
+        return _to_response(doc_row)
 
     except Exception as exc:
+        doc_row.status = DocumentStatus.failed
+        await db.flush()
         logger.error("Document ingestion failed for %r: %s", filename, exc, exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"Document ingestion failed: {exc}",
         )
+
+
+@router.delete(
+    "/documents/{document_id}",
+    response_model=DeleteResponse,
+    summary="Delete a document and all of its indexed chunks",
+    description=(
+        "Deletes every Azure AI Search chunk for the document, the original "
+        "uploaded file, and the PostgreSQL row. Returns 404 for an unknown "
+        "document_id, and a 500 (without deleting the DB row) if any step fails."
+    ),
+)
+async def delete_document(
+    document_id: str,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> DeleteResponse:
+    """Real deletion: Azure Search chunks -> uploaded file -> DB row."""
+    doc = (await db.execute(select(Document).where(Document.document_id == document_id))).scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail=f"No document found with document_id={document_id!r}.")
+
+    try:
+        chunks_deleted = _delete_chunks_from_index(document_id)
+    except RuntimeError as exc:
+        logger.error("Failed to delete Azure AI Search chunks for %r: %s", document_id, exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    if doc.storage_path:
+        try:
+            Path(doc.storage_path).unlink(missing_ok=True)
+        except OSError as exc:
+            logger.error("Failed to delete stored file %r: %s", doc.storage_path, exc)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Deleted {chunks_deleted} search chunk(s) but failed to remove the stored file: {exc}",
+            )
+
+    await db.delete(doc)
+    await db.flush()
+
+    return DeleteResponse(document_id=document_id, deleted=True, chunks_deleted=chunks_deleted)
