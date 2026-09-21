@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import json
+from pathlib import Path
 
 # ============================================================
 # Page Configuration
@@ -16,7 +18,7 @@ st.set_page_config(
 # ============================================================
 
 st.title("Enterprise Knowledge Agent")
-st.write("Dashboard — Mock Evaluation & Feedback Data")
+st.write("Dashboard — Live Evaluation & Feedback Data")
 
 st.divider()
 
@@ -26,75 +28,115 @@ st.divider()
 
 st.header("Evaluation Results")
 
-# Mock evaluation data
-evaluation_data = [
-    {
-        "Question": "What is the company's leave policy?",
-        "Score": 0.92,
-        "Status": "Answered",
-        "Grounded": "Yes",
-        "Citation": "HR Policy Document"
-    },
-    {
-        "Question": "How can I claim travel reimbursement?",
-        "Score": 0.88,
-        "Status": "Answered",
-        "Grounded": "Yes",
-        "Citation": "Travel Policy"
-    },
-    {
-        "Question": "What is the laptop replacement policy?",
-        "Score": 0.81,
-        "Status": "Answered",
-        "Grounded": "Yes",
-        "Citation": "IT Asset Policy"
-    },
-    {
-        "Question": "What is the employee bonus structure?",
-        "Score": 0.42,
-        "Status": "Failed",
-        "Grounded": "No",
-        "Citation": "No sufficient evidence"
-    },
-    {
-        "Question": "What is the work-from-home allowance?",
-        "Score": 0.76,
-        "Status": "Answered",
-        "Grounded": "Partial",
-        "Citation": "Employee Benefits"
-    }
-]
+evaluation_file = Path("evaluation/results/day3-results.json")
 
-evaluation_df = pd.DataFrame(evaluation_data)
+if evaluation_file.exists():
 
-# Summary metrics
-col1, col2, col3, col4 = st.columns(4)
+    with open(evaluation_file, "r", encoding="utf-8") as f:
+        evaluation_json = json.load(f)
 
-with col1:
-    st.metric("Overall Score", "82%")
+    results = evaluation_json.get("results") or []
 
-with col2:
-    st.metric("Questions Evaluated", "5")
+    evaluation_rows = []
 
-with col3:
-    answered_count = len(
-        evaluation_df[evaluation_df["Status"] == "Answered"]
+    for result in results:
+
+        citations = result.get("citations") or []
+
+        citation_source = ", ".join(
+            citation.get("source_file", "")
+            for citation in citations
+            if citation.get("source_file")
+        )
+
+        evaluation_rows.append({
+            "Question ID": result.get("question_id"),
+            "Question": result.get("question"),
+            "Category": result.get("category"),
+            "Correct": result.get("correct"),
+            "Citation Present": result.get("citation_present"),
+            "Citation Correct": result.get("citation_correct"),
+            "Hallucination": result.get("hallucination_detected"),
+            "Status": result.get("pass_fail"),
+            "Latency (ms)": result.get("latency_ms"),
+            "Citation": citation_source or "None"
+        })
+
+    evaluation_df = pd.DataFrame(evaluation_rows)
+
+    # --------------------------------------------------------
+    # Summary Metrics
+    # --------------------------------------------------------
+
+    total_questions = len(results)
+
+    correct_count = sum(
+        result.get("correct") is True
+        for result in results
     )
-    st.metric("Answered", answered_count)
 
-with col4:
-    failed_count = len(
-        evaluation_df[evaluation_df["Status"] == "Failed"]
+    passed_count = sum(
+        result.get("pass_fail") == "PASS"
+        for result in results
     )
-    st.metric("Failed", failed_count)
 
-st.subheader("Evaluation Details")
+    failed_count = sum(
+        result.get("pass_fail") == "FAIL"
+        for result in results
+    )
 
-st.dataframe(
-    evaluation_df,
-    use_container_width=True,
-    hide_index=True
-)
+    overall_score = (
+        (correct_count / total_questions) * 100
+        if total_questions
+        else 0
+    )
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Overall Score",
+            f"{overall_score:.1f}%"
+        )
+
+    with col2:
+        st.metric(
+            "Questions Evaluated",
+            total_questions
+        )
+
+    with col3:
+        st.metric(
+            "Passed",
+            passed_count
+        )
+
+    with col4:
+        st.metric(
+            "Failed",
+            failed_count
+        )
+
+    # --------------------------------------------------------
+    # Evaluation Details
+    # --------------------------------------------------------
+
+    st.subheader("Evaluation Details")
+
+    st.dataframe(
+        evaluation_df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.warning(
+        "Evaluation results are not available yet."
+    )
+
+    # Keep results available for the remaining sections
+    results = []
 
 st.divider()
 
@@ -104,143 +146,187 @@ st.divider()
 
 st.header("Knowledge Gaps")
 
-knowledge_gap_data = [
-    {
-        "Question": "What is the employee bonus structure?",
-        "Gap Type": "Insufficient Evidence",
-        "Priority": "High",
-        "Action": "Escalate"
-    },
-    {
-        "Question": "Does the company provide relocation assistance?",
-        "Gap Type": "Unanswered",
-        "Priority": "Medium",
-        "Action": "Review Corpus"
-    },
-    {
-        "Question": "What is the international travel approval process?",
-        "Gap Type": "Insufficient Evidence",
-        "Priority": "High",
-        "Action": "Escalate"
-    },
-    {
-        "Question": "Are employees eligible for internet reimbursement?",
-        "Gap Type": "Unanswered",
-        "Priority": "Medium",
-        "Action": "Add Documentation"
-    }
+knowledge_gap_results = [
+    result
+    for result in results
+    if result.get("category") == "knowledge_gap"
 ]
 
-knowledge_gap_df = pd.DataFrame(knowledge_gap_data)
+if knowledge_gap_results:
 
-gap_col1, gap_col2, gap_col3 = st.columns(3)
+    knowledge_gap_rows = []
 
-with gap_col1:
-    st.metric("Total Knowledge Gaps", len(knowledge_gap_df))
+    for result in knowledge_gap_results:
 
-with gap_col2:
-    high_priority = len(
-        knowledge_gap_df[knowledge_gap_df["Priority"] == "High"]
+        knowledge_gap_rows.append({
+            "Question ID": result.get("question_id"),
+            "Question": result.get("question"),
+            "Expected Behavior": result.get("expected_behavior"),
+            "Actual Answer": result.get("answer"),
+            "Status": result.get("pass_fail")
+        })
+
+    knowledge_gap_df = pd.DataFrame(
+        knowledge_gap_rows
     )
-    st.metric("High Priority", high_priority)
 
-with gap_col3:
-    escalation_count = len(
-        knowledge_gap_df[knowledge_gap_df["Action"] == "Escalate"]
+    gap_col1, gap_col2 = st.columns(2)
+
+    with gap_col1:
+        st.metric(
+            "Knowledge Gap Cases",
+            len(knowledge_gap_results)
+        )
+
+    with gap_col2:
+
+        gap_failed = sum(
+            result.get("pass_fail") == "FAIL"
+            for result in knowledge_gap_results
+        )
+
+        st.metric(
+            "Failed Gap Cases",
+            gap_failed
+        )
+
+    st.subheader("Knowledge Gap Details")
+
+    st.dataframe(
+        knowledge_gap_df,
+        use_container_width=True,
+        hide_index=True
     )
-    st.metric("Requires Escalation", escalation_count)
 
-st.subheader("Knowledge Gap Details")
+else:
 
-st.dataframe(
-    knowledge_gap_df,
-    use_container_width=True,
-    hide_index=True
-)
+    st.info(
+        "No knowledge-gap cases found in the evaluation results."
+    )
 
 st.divider()
 
 # ============================================================
-# 3. User Feedback
+# 3. Out of Scope
+# ============================================================
+
+st.header("Out of Scope")
+
+out_of_scope_results = [
+    result
+    for result in results
+    if result.get("category") == "out_of_scope"
+]
+
+if out_of_scope_results:
+
+    out_of_scope_rows = []
+
+    for result in out_of_scope_results:
+
+        out_of_scope_rows.append({
+            "Question ID": result.get("question_id"),
+            "Question": result.get("question"),
+            "Expected Behavior": result.get("expected_behavior"),
+            "Actual Answer": result.get("answer"),
+            "Status": result.get("pass_fail")
+        })
+
+    out_of_scope_df = pd.DataFrame(
+        out_of_scope_rows
+    )
+
+    st.metric(
+        "Out-of-Scope Cases",
+        len(out_of_scope_results)
+    )
+
+    st.subheader("Out-of-Scope Details")
+
+    st.dataframe(
+        out_of_scope_df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+else:
+
+    st.info(
+        "No out-of-scope cases found in the evaluation results."
+    )
+
+st.divider()
+
+# ============================================================
+# 4. User Feedback
 # ============================================================
 
 st.header("User Feedback")
 
-feedback_data = [
-    {
-        "User": "User 001",
-        "Feedback": "The answer was clear and helpful.",
-        "Sentiment": "Positive",
-        "Rating": 5
-    },
-    {
-        "User": "User 002",
-        "Feedback": "The answer included a useful policy citation.",
-        "Sentiment": "Positive",
-        "Rating": 5
-    },
-    {
-        "User": "User 003",
-        "Feedback": "The answer did not contain enough information.",
-        "Sentiment": "Negative",
-        "Rating": 2
-    },
-    {
-        "User": "User 004",
-        "Feedback": "The response was mostly correct but needed more detail.",
-        "Sentiment": "Negative",
-        "Rating": 3
-    },
-    {
-        "User": "User 005",
-        "Feedback": "The response was quick and relevant.",
-        "Sentiment": "Positive",
-        "Rating": 4
-    }
-]
-
-feedback_df = pd.DataFrame(feedback_data)
-
-positive_count = len(
-    feedback_df[feedback_df["Sentiment"] == "Positive"]
-)
-
-negative_count = len(
-    feedback_df[feedback_df["Sentiment"] == "Negative"]
-)
-
-feedback_col1, feedback_col2, feedback_col3 = st.columns(3)
-
-with feedback_col1:
-    st.metric("Total Feedback", len(feedback_df))
-
-with feedback_col2:
-    st.metric("Positive Feedback", positive_count)
-
-with feedback_col3:
-    st.metric("Negative Feedback", negative_count)
-
-st.subheader("Recent Feedback")
-
-st.dataframe(
-    feedback_df,
-    use_container_width=True,
-    hide_index=True
+st.info(
+    "Feedback storage is not connected yet. "
+    "There is currently no /feedback endpoint available. "
+    "Feedback integration will be added when backend storage "
+    "is available."
 )
 
 st.divider()
 
-st.caption(
-    "Mock/sample data for dashboard development. "
-    "This data will be replaced with real evaluation and tracing data later."
-)
-
-st.divider()
+# ============================================================
+# 5. Escalation / Human Review
+# ============================================================
 
 st.header("Escalation / Human Review")
 
 st.info(
-    "No escalation events recorded yet. "
-    "Escalation analytics will appear here once the "
-    "confidence-based escalation system is enabled."
+    "Escalation fields are defined in the /chat contract, "
+    "but the current dashboard does not yet have access to "
+    "a persisted escalation history or API."
+)
+
+st.subheader("Expected /chat Escalation Fields")
+
+st.code(
+    """response_id
+escalation_required
+escalation_reason
+action_taken
+action_type
+ticket_id""",
+    language="text"
+)
+
+st.subheader("Escalation Rules")
+
+st.write(
+    "Knowledge-gap escalation:"
+)
+
+st.code(
+    'escalation_required == true AND '
+    'escalation_reason == "knowledge_gap"',
+    language="text"
+)
+
+st.write(
+    "Out-of-scope escalation:"
+)
+
+st.code(
+    'escalation_required == true AND '
+    'escalation_reason == "out_of_scope"',
+    language="text"
+)
+
+st.divider()
+
+# ============================================================
+# Dashboard Status
+# ============================================================
+
+st.caption(
+    "Evaluation results and knowledge-gap cases are loaded "
+    "from the project's evaluation output. User feedback and "
+    "historical escalation data are not yet available through "
+    "a backend endpoint."
 )
