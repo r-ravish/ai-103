@@ -20,3 +20,16 @@ openai>=1.68.0
 
 # ── Environment variables ───────────────────────────────────────────────────
 python-dotenv>=1.0.1
+
+# ── PDF parsing (onboarding module) ─────────────────────────────────────────
+pypdf>=4.0.0
+
+# ── PostgreSQL / ORM / Migrations (Day 4+) ───────────────────────────────────
+# Async SQLAlchemy 2.0 + asyncpg for all FastAPI async routes.
+# psycopg2-binary is used only by Alembic env.py (sync) and seed scripts.
+sqlalchemy>=2.0.0,<3.0.0
+alembic>=1.13.0
+asyncpg>=0.30.0
+psycopg2-binary>=2.9.0
+
+pypdf
