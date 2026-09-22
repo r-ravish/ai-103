@@ -24,7 +24,8 @@ logger = logging.getLogger(__name__)
 # Initialize the Bot Framework Adapter with credentials from the environment.
 APP_ID = os.getenv("MICROSOFT_APP_ID", "")
 APP_PASSWORD = os.getenv("MICROSOFT_APP_PASSWORD", "")
-settings = BotFrameworkAdapterSettings(app_id=APP_ID, app_password=APP_PASSWORD)
+APP_TENANT = os.getenv("MICROSOFT_APP_TENANT_ID", "")
+settings = BotFrameworkAdapterSettings(app_id=APP_ID, app_password=APP_PASSWORD, channel_auth_tenant=APP_TENANT if APP_TENANT else None)
 adapter = BotFrameworkAdapter(settings)
 
 class TeamsKnowledgeBot(ActivityHandler):
