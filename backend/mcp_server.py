@@ -20,6 +20,8 @@ MCP_PUBLIC_ORIGIN: str = f"https://{MCP_PUBLIC_HOST}" if MCP_PUBLIC_HOST else ""
 transport_security = TransportSecuritySettings(
     allowed_hosts=[
         *([MCP_PUBLIC_HOST, f"{MCP_PUBLIC_HOST}:*"] if MCP_PUBLIC_HOST else []),
+        "undisputed-zitimobile.ngrok-free.dev",
+        "undocked-ditzy-mobile.ngrok-free.dev",
         "127.0.0.1",
         "127.0.0.1:*",
         "localhost",
