@@ -1,13 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { MessageSquare, UploadCloud, LogOut, User as UserIcon, Shield } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Home, MessageSquare, UploadCloud, LogOut, User as UserIcon, Shield } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 export default function Header() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user, logout } = useAuth();
+
+  const handleHomeClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (pathname === "/") {
+      window.location.href = "/";
+    } else {
+      router.push("/");
+    }
+  };
 
   return (
     <header className="border-b border-[var(--color-border)] bg-[var(--color-paper)] sticky top-0 z-30 shadow-xs">
@@ -15,6 +25,7 @@ export default function Header() {
         {/* Click logo/title to go back to Home page */}
         <Link
           href="/"
+          onClick={handleHomeClick}
           className="flex items-center gap-2.5 hover:opacity-85 transition-opacity group cursor-pointer"
           title="Return to Chat Home"
         >
@@ -58,14 +69,15 @@ export default function Header() {
           <nav className="flex items-center gap-1 bg-[var(--color-canvas)] p-1 rounded-lg border border-[var(--color-border)]">
             <Link
               href="/"
+              onClick={handleHomeClick}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                 pathname === "/"
                   ? "bg-white text-[var(--color-ink)] shadow-xs"
                   : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
               }`}
             >
-              <MessageSquare className="h-3.5 w-3.5" />
-              Chat
+              <Home className="h-3.5 w-3.5" />
+              Home
             </Link>
             {user?.role === "admin" && (
               <Link
