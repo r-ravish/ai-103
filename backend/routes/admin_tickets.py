@@ -68,6 +68,7 @@ class TicketAdminItem(BaseModel):
     is_acknowledged: bool
     acknowledged_at: str | None
     admin_notes: str | None
+    admin_response: str | None
     created_at: str
     employee: EmployeeSummary | None
     acknowledged_by: EmployeeSummary | None
@@ -87,6 +88,7 @@ class TicketAdminUpdate(BaseModel):
     status: Literal["open", "in_progress", "resolved", "closed"] | None = None
     is_acknowledged: bool | None = None
     admin_notes: str | None = None
+    admin_response: str | None = None
     priority: Literal["low", "medium", "high"] | None = None
 
 
@@ -97,6 +99,7 @@ class TicketAdminCreate(BaseModel):
     employee_email: str | None = None
     is_acknowledged: bool = False
     admin_notes: str | None = None
+    admin_response: str | None = None
 
 
 def _to_admin_item(ticket: Ticket) -> TicketAdminItem:
@@ -140,6 +143,7 @@ def _to_admin_item(ticket: Ticket) -> TicketAdminItem:
         is_acknowledged=ticket.is_acknowledged,
         acknowledged_at=ticket.acknowledged_at.isoformat() if ticket.acknowledged_at else None,
         admin_notes=ticket.admin_notes,
+        admin_response=ticket.admin_response,
         created_at=ticket.created_at.isoformat(),
         employee=employee_summary,
         acknowledged_by=acknowledged_by_summary,
@@ -293,6 +297,9 @@ async def update_admin_ticket(
 
     if payload.admin_notes is not None:
         ticket.admin_notes = payload.admin_notes
+
+    if payload.admin_response is not None:
+        ticket.admin_response = payload.admin_response
 
     if payload.is_acknowledged is not None:
         ticket.is_acknowledged = payload.is_acknowledged

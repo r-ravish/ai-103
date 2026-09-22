@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
+import { RotateCcw } from "lucide-react";
 import { Message } from "@/types/chat";
 import { sendChatMessage, fetchConversations, fetchConversation } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useChatSession } from "@/hooks/useChatSession";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 import ChatAuthPrompt from "./ChatAuthPrompt";
@@ -23,9 +25,8 @@ export interface ChatHandle {
 
 const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
   const { user, refreshUser } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { messages, setMessages, conversationId, setConversationId, isHydrated, clearSession } = useChatSession();
   const [isLoading, setIsLoading] = useState(false);
-  const [conversationId, setConversationId] = useState<number | null>(null);
   /** True while we are loading the most-recent persisted conversation. */
   const [isRestoring, setIsRestoring] = useState(false);
 
@@ -33,16 +34,22 @@ const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
   useEffect(() => {
     if (!user) {
       // User logged out — clear everything.
-      setMessages([]);
-      setConversationId(null);
+      clearSession();
       return;
     }
+
+    if (!isHydrated) return; // Wait for sessionStorage to load
+
+    if (messages.length > 0) return; // Active session exists
 
     let cancelled = false;
 
     async function restoreLatest() {
       setIsRestoring(true);
       try {
+        if (sessionStorage.getItem("force_new_chat") === "true") {
+          return;
+        }
         const conversations = await fetchConversations();
         if (cancelled || conversations.length === 0) return;
 
@@ -63,13 +70,12 @@ const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
 
     restoreLatest();
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, isHydrated, messages.length, setMessages, setConversationId, clearSession]);
 
   // ── New Chat: wipe current state and start a fresh conversation ───────────
   const handleNewChat = useCallback(() => {
-    setMessages([]);
-    setConversationId(null);
-  }, []);
+    clearSession();
+  }, [clearSession]);
 
   // Expose handleNewChat to the parent via ref.
   useImperativeHandle(ref, () => ({ handleNewChat }), [handleNewChat]);
@@ -82,6 +88,10 @@ const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
       content,
       timestamp: Date.now(),
     };
+
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("force_new_chat");
+    }
 
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
@@ -143,7 +153,21 @@ const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
           <EmptyState onSelectSuggestion={handleSend} />
         </div>
       ) : (
-        <MessageList messages={messages} isLoading={isLoading} />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {/* New Chat button — top-right corner, visible when conversation is active */}
+          <div className="absolute right-3 top-2 z-10">
+            <button
+              type="button"
+              onClick={handleNewChat}
+              title="Clear conversation and start fresh"
+              className="flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-paper)]/80 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-muted)] backdrop-blur-sm transition-all hover:border-[var(--color-border-strong)] hover:text-[var(--color-ink)] shadow-xs cursor-pointer"
+            >
+              <RotateCcw className="h-3 w-3" />
+              New Chat
+            </button>
+          </div>
+          <MessageList messages={messages} isLoading={isLoading} />
+        </div>
       )}
 
       {user ? (

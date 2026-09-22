@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.deps import get_current_user_optional
+from app.deps import get_current_user, get_current_user_optional
 from db.database import get_db
 from db.models import Ticket, TicketPriority, TicketStatus, User
 
@@ -69,7 +69,14 @@ class TicketResponse(BaseModel):
     description: str
     priority: Literal["low", "medium", "high"]
     status: Literal["open", "in_progress", "resolved", "closed"]
+    admin_response: str | None
     created_at: str
+
+
+class TicketListResponse(BaseModel):
+    """List of tickets."""
+
+    tickets: list[TicketResponse]
 
 
 class TicketFound(BaseModel):
@@ -93,6 +100,7 @@ def _to_response(ticket: Ticket) -> TicketResponse:
         description=ticket.description,
         priority=ticket.priority.value,
         status=ticket.status.value,
+        admin_response=ticket.admin_response,
         created_at=ticket.created_at.isoformat(),
     )
 
@@ -130,6 +138,22 @@ async def create_ticket(
     await db.refresh(ticket)
 
     return _to_response(ticket)
+
+
+@router.get(
+    "/my",
+    response_model=TicketListResponse,
+)
+async def get_my_tickets(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> TicketListResponse:
+    """
+    Retrieve all tickets created by the logged-in user.
+    """
+    stmt = select(Ticket).where(Ticket.created_by_id == user.id).order_by(Ticket.created_at.desc())
+    tickets = (await db.execute(stmt)).scalars().all()
+    return TicketListResponse(tickets=[_to_response(t) for t in tickets])
 
 
 @router.get(

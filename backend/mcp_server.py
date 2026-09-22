@@ -109,13 +109,19 @@ async def get_support_ticket(ticket_id: str) -> str:
         if not ticket:
             return f"Ticket {ticket_id!r} was not found."
 
+        admin_resp_str = ""
+        admin_resp = ticket.get('admin_response')
+        if admin_resp:
+            admin_resp_str = f"\nAdmin Response: {admin_resp}"
+
         return (
             "Ticket found.\n"
             f"ID: {ticket.get('ticket_id')}\n"
             f"Title: {ticket.get('title')}\n"
             f"Description: {ticket.get('description')}\n"
             f"Priority: {ticket.get('priority')}\n"
-            f"Status: {ticket.get('status')}\n"
+            f"Status: {ticket.get('status')}"
+            f"{admin_resp_str}\n"
             f"Created: {ticket.get('created_at')}"
         )
     except httpx.HTTPStatusError as exc:

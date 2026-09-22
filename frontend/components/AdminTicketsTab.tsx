@@ -43,6 +43,7 @@ export interface TicketAdminItem {
   is_acknowledged: boolean;
   acknowledged_at: string | null;
   admin_notes: string | null;
+  admin_response: string | null;
   created_at: string;
   employee: EmployeeSummary | null;
   acknowledged_by: EmployeeSummary | null;
@@ -66,6 +67,7 @@ export default function AdminTicketsTab() {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
+  const [editingResponses, setEditingResponses] = useState<Record<string, string>>({});
   const [updatingTicketId, setUpdatingTicketId] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [, startTransition] = useTransition();
@@ -98,10 +100,13 @@ export default function AdminTicketsTab() {
         setData(json);
         // Initialize note draft state
         const drafts: Record<string, string> = {};
+        const responseDrafts: Record<string, string> = {};
         json.tickets.forEach((t) => {
           drafts[t.ticket_id] = t.admin_notes || "";
+          responseDrafts[t.ticket_id] = t.admin_response || "";
         });
         setEditingNotes(drafts);
+        setEditingResponses(responseDrafts);
       } else {
         console.error("Failed to fetch admin tickets:", res.statusText);
       }
@@ -222,6 +227,39 @@ export default function AdminTicketsTab() {
       setTimeout(() => setFeedbackMsg(null), 3000);
     } catch (err) {
       setFeedbackMsg({ type: "error", text: "Failed to save note." });
+    } finally {
+      setUpdatingTicketId(null);
+    }
+  }
+
+  async function handleSaveResponse(ticketId: string) {
+    const responseText = editingResponses[ticketId] ?? "";
+    setUpdatingTicketId(ticketId);
+    try {
+      const res = await fetch(`/api/admin/tickets/${ticketId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ admin_response: responseText }),
+      });
+
+      if (!res.ok) throw new Error("Failed to save response");
+      const updated: TicketAdminItem = await res.json();
+
+      startTransition(() => {
+        setData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            tickets: prev.tickets.map((t) => (t.ticket_id === updated.ticket_id ? updated : t)),
+          };
+        });
+      });
+
+      setFeedbackMsg({ type: "success", text: `Admin response saved for ${ticketId}.` });
+      setTimeout(() => setFeedbackMsg(null), 3000);
+    } catch (err) {
+      setFeedbackMsg({ type: "error", text: "Failed to save response." });
     } finally {
       setUpdatingTicketId(null);
     }
@@ -663,7 +701,31 @@ export default function AdminTicketsTab() {
                         [ticket.ticket_id]: e.target.value,
                       })
                     }
-                    placeholder="Add administrative review notes, action steps, or explanation of how this concern was addressed..."
+                    placeholder="Add administrative review notes (internal only)..."
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)] mb-3"
+                  />
+
+                  {/* Admin Response Textarea */}
+                  <div className="flex items-center justify-between mb-2 mt-4">
+                    <span className="text-xs font-semibold text-[var(--color-ink)]">Admin Response (Visible to Employee)</span>
+                    <button
+                      onClick={() => handleSaveResponse(ticket.ticket_id)}
+                      disabled={isPending}
+                      className="flex items-center gap-1 text-xs font-medium bg-[var(--color-seal)] text-white px-3 py-1 rounded-lg hover:bg-[var(--color-ink)] transition-colors cursor-pointer"
+                    >
+                      Save Response
+                    </button>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={editingResponses[ticket.ticket_id] ?? ""}
+                    onChange={(e) =>
+                      setEditingResponses({
+                        ...editingResponses,
+                        [ticket.ticket_id]: e.target.value,
+                      })
+                    }
+                    placeholder="Add a 1-2 line response for the employee to see when they check ticket status..."
                     className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
                   />
                 </div>
