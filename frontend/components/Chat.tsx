@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { Message } from "@/types/chat";
 import { sendChatMessage } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
+import ChatAuthPrompt from "./ChatAuthPrompt";
 import EmptyState from "./EmptyState";
 
 function createId(): string {
@@ -15,6 +17,7 @@ function createId(): string {
 }
 
 export default function Chat() {
+  const { user, refreshUser } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -54,6 +57,10 @@ export default function Chat() {
           ? error.message
           : "Something went wrong producing a response. Please try again.";
 
+      if (errorMessageText.toLowerCase().includes("not authenticated")) {
+        await refreshUser();
+      }
+
       const errorMessage: Message = {
         id: createId(),
         role: "assistant",
@@ -75,7 +82,12 @@ export default function Chat() {
       ) : (
         <MessageList messages={messages} isLoading={isLoading} />
       )}
-      <ChatInput onSend={handleSend} disabled={isLoading} />
+
+      {user ? (
+        <ChatInput onSend={handleSend} disabled={isLoading} />
+      ) : (
+        <ChatAuthPrompt />
+      )}
     </div>
   );
 }

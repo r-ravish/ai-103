@@ -109,7 +109,7 @@ class User(Base):
 
     # Relationships
     documents     : Mapped[list[Document]]       = relationship("Document",        back_populates="uploaded_by")
-    tickets       : Mapped[list[Ticket]]         = relationship("Ticket",          back_populates="created_by")
+    tickets       : Mapped[list[Ticket]]         = relationship("Ticket",          back_populates="created_by", foreign_keys="[Ticket.created_by_id]")
     feedback_list : Mapped[list[Feedback]]       = relationship("Feedback",        back_populates="user")
 
     __table_args__ = (
@@ -170,36 +170,44 @@ class Ticket(Base):
     """
     __tablename__ = "tickets"
 
-    id            : Mapped[int]          = mapped_column(Integer, primary_key=True, autoincrement=True)
-    ticket_id     : Mapped[str]          = mapped_column(String(64), nullable=False)
-    title         : Mapped[str]          = mapped_column(String(512), nullable=False)
-    description   : Mapped[str]          = mapped_column(Text, nullable=False)
-    priority      : Mapped[TicketPriority] = mapped_column(
+    id                 : Mapped[int]                 = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticket_id          : Mapped[str]                 = mapped_column(String(64), nullable=False)
+    title              : Mapped[str]                 = mapped_column(String(512), nullable=False)
+    description        : Mapped[str]                 = mapped_column(Text, nullable=False)
+    priority           : Mapped[TicketPriority]      = mapped_column(
         Enum(TicketPriority, name="ticketpriority"),
         nullable=False,
         default=TicketPriority.medium,
     )
-    status        : Mapped[TicketStatus] = mapped_column(
+    status             : Mapped[TicketStatus]        = mapped_column(
         Enum(TicketStatus, name="ticketstatus"),
         nullable=False,
         default=TicketStatus.open,
     )
-    created_at    : Mapped[datetime]     = mapped_column(
+    is_acknowledged    : Mapped[bool]                = mapped_column(Boolean, nullable=False, default=False)
+    acknowledged_at    : Mapped[datetime | None]     = mapped_column(DateTime(timezone=True), nullable=True)
+    acknowledged_by_id : Mapped[int | None]          = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    admin_notes        : Mapped[str | None]          = mapped_column(Text, nullable=True)
+    created_at         : Mapped[datetime]            = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
-    created_by_id : Mapped[int | None]   = mapped_column(
+    created_by_id      : Mapped[int | None]          = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
     # Relationships
-    created_by       : Mapped[User | None]              = relationship("User", back_populates="tickets")
-    escalation_events: Mapped[list[EscalationEvent]]    = relationship("EscalationEvent", back_populates="ticket")
+    created_by        : Mapped[User | None]              = relationship("User", back_populates="tickets", foreign_keys=[created_by_id])
+    acknowledged_by   : Mapped[User | None]              = relationship("User", foreign_keys=[acknowledged_by_id])
+    escalation_events : Mapped[list[EscalationEvent]]    = relationship("EscalationEvent", back_populates="ticket")
 
     __table_args__ = (
         UniqueConstraint("ticket_id", name="uq_tickets_ticket_id"),
-        Index("ix_tickets_ticket_id",  "ticket_id"),
-        Index("ix_tickets_status",     "status"),
-        Index("ix_tickets_created_at", "created_at"),
+        Index("ix_tickets_ticket_id",       "ticket_id"),
+        Index("ix_tickets_status",          "status"),
+        Index("ix_tickets_is_acknowledged", "is_acknowledged"),
+        Index("ix_tickets_created_at",      "created_at"),
     )
 
     def __repr__(self) -> str:

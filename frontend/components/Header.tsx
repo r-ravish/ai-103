@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageSquare, UploadCloud } from "lucide-react";
+import { MessageSquare, UploadCloud, LogOut, User as UserIcon, Shield } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 export default function Header() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
 
   return (
     <header className="border-b border-[var(--color-border)] bg-[var(--color-paper)] sticky top-0 z-30 shadow-xs">
@@ -46,12 +48,12 @@ export default function Header() {
               Enterprise Knowledge Agent
             </h1>
             <span className="text-[11px] text-[var(--color-muted)] font-sans -mt-0.5">
-              HR & IT Policy Q&A System
+              Internal Policy & Knowledge Hub
             </span>
           </div>
         </Link>
 
-        {/* Navigation & Status */}
+        {/* Navigation & User Status */}
         <div className="flex items-center gap-3">
           <nav className="flex items-center gap-1 bg-[var(--color-canvas)] p-1 rounded-lg border border-[var(--color-border)]">
             <Link
@@ -65,29 +67,51 @@ export default function Header() {
               <MessageSquare className="h-3.5 w-3.5" />
               Chat
             </Link>
-            <Link
-              href="/admin"
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                pathname === "/admin"
-                  ? "bg-white text-[var(--color-ink)] shadow-xs"
-                  : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
-              }`}
-            >
-              <UploadCloud className="h-3.5 w-3.5" />
-              Onboarding
-            </Link>
+            {user?.role === "admin" && (
+              <Link
+                href="/admin"
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  pathname.startsWith("/admin")
+                    ? "bg-white text-[var(--color-ink)] shadow-xs"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                }`}
+              >
+                <UploadCloud className="h-3.5 w-3.5" />
+                Onboarding
+              </Link>
+            )}
           </nav>
 
-          <div
-            className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-[var(--color-muted)] px-2.5 py-1 rounded-md border border-[var(--color-border)] bg-[var(--color-paper)]"
-            aria-label="Environment status: Pilot"
-          >
-            <span
-              aria-hidden="true"
-              className="h-1.5 w-1.5 rounded-full bg-[var(--color-seal)] animate-pulse"
-            />
-            Pilot
-          </div>
+          {/* User profile / Logout */}
+          {user ? (
+            <div className="flex items-center gap-2 border-l border-[var(--color-border)] pl-3 ml-1">
+              <div className="hidden sm:flex flex-col items-end text-right">
+                <span className="text-xs font-semibold font-mono tracking-tight text-[var(--color-ink)] max-w-[140px] truncate">
+                  {user.name && !user.name.toLowerCase().includes("pilot")
+                    ? user.name
+                    : `EMP-${(1000 + (user.id || 1)).toString()}`}
+                </span>
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--color-seal)] flex items-center gap-1">
+                  {user.role === "admin" && <Shield className="h-2.5 w-2.5" />}
+                  {user.role}
+                </span>
+              </div>
+
+              <button
+                onClick={() => logout()}
+                title="Sign out"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-ink)] hover:bg-[var(--color-canvas)] rounded-lg border border-[var(--color-border)] transition-colors cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">Sign out</span>
+              </button>
+            </div>
+          ) : (
+            <div className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-[var(--color-muted)] px-2.5 py-1 rounded-md border border-[var(--color-border)] bg-[var(--color-canvas)]">
+              <UserIcon className="h-3.5 w-3.5" />
+              <span>Not signed in</span>
+            </div>
+          )}
         </div>
       </div>
     </header>

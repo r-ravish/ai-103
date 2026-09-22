@@ -1,0 +1,19 @@
+CORPORATE SOCIAL MEDIA AND PUBLIC RELATIONS POLICY
+
+SECTION 1: AUTHORIZED SPOKESPERSON PROTOCOL
+Only pre-approved designated corporate spokespersons (specifically members of the Executive Leadership Team and the Director of Corporate Communications) are authorized to make official public declarations, issue press statements, or grant interviews to broadcast, print, or digital news journalists on behalf of the company.
+
+Under no circumstances should non-designated employees speak to reporters, publish quotes, or offer anonymous commentary regarding company operations, financial performance, mergers, legal matters, or personnel changes.
+Any unsolicited inbound press inquiries from media reporters must be immediately routed to: press@company.internal within two (2) hours of receipt.
+
+SECTION 2: PERSONAL SOCIAL MEDIA CONDUCT
+Employees maintain the right to participate in personal social media channels (e.g., LinkedIn, X, Instagram, YouTube, personal podcasts). However, when an employee publicly references their employer, work responsibilities, or company products in their biographical profile or public posts, the following guardrails apply:
+- Prominently include the standard personal disclaimer: "Views and opinions expressed are solely my own and do not represent the official stance of my employer."
+- Never disclose confidential business information, unreleased product roadmap features, confidential partner agreements, or customer telemetry data.
+- Refrain from engaging in defensive or confrontational arguments with critical customers or competitors on public threads.
+
+SECTION 3: CRISIS COMMUNICATIONS ESCALATION
+In the event of an emerging public relations issue, data security event, or viral social media controversy involving the organization:
+- Employees are strictly prohibited from publishing personal defenses, explanations, or internal email excerpts.
+- All communications are centrally coordinated by the Crisis Response Unit.
+- Report observed active misinformation or smear campaigns directly to: communications-incident@company.internal.
