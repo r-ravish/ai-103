@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { RotateCcw } from "lucide-react";
 import { Message } from "@/types/chat";
 import { sendChatMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
+import { useChatSession } from "@/hooks/useChatSession";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
 import ChatAuthPrompt from "./ChatAuthPrompt";
@@ -18,7 +20,7 @@ function createId(): string {
 
 export default function Chat() {
   const { user, refreshUser } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { messages, setMessages, clearMessages } = useChatSession();
   const [isLoading, setIsLoading] = useState(false);
 
   async function handleSend(content: string) {
@@ -80,7 +82,21 @@ export default function Chat() {
           <EmptyState onSelectSuggestion={handleSend} />
         </div>
       ) : (
-        <MessageList messages={messages} isLoading={isLoading} />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {/* New Chat button — top-right corner, visible when conversation is active */}
+          <div className="absolute right-3 top-2 z-10">
+            <button
+              type="button"
+              onClick={clearMessages}
+              title="Clear conversation and start fresh"
+              className="flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-paper)]/80 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-muted)] backdrop-blur-sm transition-all hover:border-[var(--color-border-strong)] hover:text-[var(--color-ink)] shadow-xs cursor-pointer"
+            >
+              <RotateCcw className="h-3 w-3" />
+              New Chat
+            </button>
+          </div>
+          <MessageList messages={messages} isLoading={isLoading} />
+        </div>
       )}
 
       {user ? (

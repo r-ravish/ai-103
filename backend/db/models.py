@@ -190,6 +190,7 @@ class Ticket(Base):
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     admin_notes        : Mapped[str | None]          = mapped_column(Text, nullable=True)
+    admin_response     : Mapped[str | None]          = mapped_column(Text, nullable=True)
     created_at         : Mapped[datetime]            = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
