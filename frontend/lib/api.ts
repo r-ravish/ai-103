@@ -110,6 +110,7 @@ export async function sendChatMessage(question: string): Promise<ChatResult> {
       "Content-Type": "application/json",
       Accept: "application/json",
     },
+    credentials: "include",
     body: JSON.stringify({ question }),
   });
 

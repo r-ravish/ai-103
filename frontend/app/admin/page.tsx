@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import Header from "@/components/Header";
+import AdminTicketsTab from "@/components/AdminTicketsTab";
+import { useAuth } from "@/lib/auth-context";
 import {
   UploadCloud,
   FileText,
@@ -11,6 +14,10 @@ import {
   Layers,
   Database,
   Calendar,
+  ShieldAlert,
+  ArrowLeft,
+  FileQuestion,
+  Trash2,
 } from "lucide-react";
 
 interface DocumentStatusItem {
@@ -23,6 +30,8 @@ interface DocumentStatusItem {
 }
 
 export default function AdminOnboardingPage() {
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState<"tickets" | "documents">("tickets");
   const [documents, setDocuments] = useState<DocumentStatusItem[]>([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -35,9 +44,12 @@ export default function AdminOnboardingPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function fetchDocuments() {
+    if (user?.role !== "admin") return;
     setIsLoadingDocs(true);
     try {
-      const res = await fetch("/api/onboarding/documents");
+      const res = await fetch("/api/onboarding/documents", {
+        credentials: "include",
+      });
       if (res.ok) {
         const data = await res.json();
         setDocuments(data.documents || []);
@@ -52,8 +64,12 @@ export default function AdminOnboardingPage() {
   }
 
   useEffect(() => {
-    fetchDocuments();
-  }, []);
+    if (user?.role === "admin") {
+      fetchDocuments();
+    } else {
+      setIsLoadingDocs(false);
+    }
+  }, [user]);
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     setStatusMessage(null);
@@ -64,6 +80,14 @@ export default function AdminOnboardingPage() {
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
+    if (user?.role !== "admin") {
+      setStatusMessage({
+        type: "error",
+        text: "Only administrator accounts are permitted to upload policy documents.",
+      });
+      return;
+    }
+
     if (!selectedFile) {
       setStatusMessage({
         type: "error",
@@ -81,6 +105,7 @@ export default function AdminOnboardingPage() {
 
       const res = await fetch("/api/onboarding/upload", {
         method: "POST",
+        credentials: "include",
         body: formData,
       });
 
@@ -119,184 +144,326 @@ export default function AdminOnboardingPage() {
     }
   }
 
+  async function handleDeleteDocument(documentId: string, filename: string) {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete "${filename}"? All indexed chunks will be permanently removed from Azure AI Search.`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/onboarding/documents/${documentId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to delete document from Azure AI Search.");
+      }
+
+      const result = await res.json();
+      setStatusMessage({
+        type: "success",
+        text: `Document "${filename}" and all of its search chunks (${result.chunks_deleted || 0} chunks) were permanently deleted from Azure AI Search.`,
+      });
+      await fetchDocuments();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete document.";
+      setStatusMessage({
+        type: "error",
+        text: msg,
+      });
+    }
+  }
+
+  // If loading auth state, show loading indicator
+  if (isAuthLoading) {
+    return (
+      <div className="flex h-full flex-1 flex-col bg-[var(--color-canvas)]">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="flex items-center gap-2 text-sm text-[var(--color-muted)]">
+            <RefreshCw className="h-4 w-4 animate-spin" />
+            <span>Checking permissions…</span>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // If not admin, show Access Restricted screen
+  if (!user || user.role !== "admin") {
+    return (
+      <div className="flex h-full flex-1 flex-col bg-[var(--color-canvas)]">
+        <Header />
+        <main className="flex-1 overflow-y-auto px-4 py-16 sm:px-6 flex items-center justify-center">
+          <div className="max-w-md w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-paper)] p-8 shadow-xs text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--color-flag-surface)] text-[var(--color-flag)] border border-[var(--color-flag-border)] mb-4">
+              <ShieldAlert className="h-6 w-6" />
+            </div>
+            <h2
+              className="text-xl font-semibold text-[var(--color-ink)] mb-2"
+              style={{ fontFamily: "var(--font-stack-serif)" }}
+            >
+              Admin Access Required
+            </h2>
+            <p className="text-sm text-[var(--color-muted)] leading-relaxed mb-6">
+              The document onboarding pipeline and policy uploads are restricted to administrators.
+              {user ? (
+                <span className="block mt-2 font-mono text-xs text-[var(--color-ink-soft)]">
+                  Current user: <strong>{user.name || user.email}</strong> ({user.role.toUpperCase()})
+                </span>
+              ) : (
+                <span className="block mt-2 text-xs text-[var(--color-ink-soft)]">
+                  You are currently not signed in.
+                </span>
+              )}
+            </p>
+            <div className="flex flex-col gap-2.5">
+              <Link
+                href="/"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-ink)] px-5 py-2.5 text-xs font-medium text-white shadow-xs hover:bg-[var(--color-ink-soft)] transition-colors cursor-pointer"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Return to Policy Chat
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-1 flex-col bg-[var(--color-canvas)]">
       <Header />
 
       <main className="flex-1 overflow-y-auto px-4 py-8 sm:px-6">
-        <div className="mx-auto max-w-4xl space-y-8">
-          {/* Page Header */}
-          <div className="border-b border-[var(--color-border)] pb-5">
-            <h2
-              className="text-2xl font-semibold tracking-tight text-[var(--color-ink)]"
-              style={{ fontFamily: "var(--font-stack-serif)" }}
-            >
-              Document Onboarding Pipeline
-            </h2>
-            <p className="mt-1 text-sm text-[var(--color-muted)]">
-              Upload company HR & IT policies to chunk, embed, and index into Azure AI Search for live agent retrieval.
-            </p>
-          </div>
-
-          {/* Upload Card */}
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-paper)] p-6 shadow-xs">
-            <div className="flex items-center gap-2.5 border-b border-[var(--color-border)] pb-4 mb-5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-seal-soft)] text-[var(--color-seal)]">
-                <UploadCloud className="h-4 w-4" />
-              </div>
-              <div>
-                <h3 className="text-base font-medium text-[var(--color-ink)]">
-                  Upload New Policy Document
-                </h3>
-                <p className="text-xs text-[var(--color-muted)]">
-                  Supported formats: Markdown (.md), Text (.txt), PDF (.pdf)
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleUpload} className="space-y-4">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                <label className="flex-1 flex items-center gap-3 cursor-pointer rounded-xl border border-dashed border-[var(--color-border-strong)] bg-[var(--color-canvas)] px-4 py-3 hover:border-[var(--color-seal)] transition-colors">
-                  <FileText className="h-5 w-5 text-[var(--color-muted)] shrink-0" />
-                  <span className="text-sm font-medium text-[var(--color-ink)] truncate">
-                    {selectedFile ? selectedFile.name : "Choose a policy document..."}
-                  </span>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".md,.txt,.pdf,.docx"
-                    onChange={handleFileSelect}
-                    className="sr-only"
-                  />
-                </label>
-
-                <button
-                  type="submit"
-                  disabled={isUploading || !selectedFile}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-[var(--color-ink)] px-6 py-3 text-sm font-medium text-white shadow-xs hover:bg-[var(--color-ink-soft)] disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0 cursor-pointer"
-                >
-                  {isUploading ? (
-                    <>
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Uploading & Ingesting...
-                    </>
-                  ) : (
-                    <>
-                      <UploadCloud className="h-4 w-4" />
-                      Upload Document
-                    </>
-                  )}
-                </button>
-              </div>
-
-              {/* Status Message */}
-              {statusMessage && (
-                <div
-                  className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-xs font-medium transition-all ${
-                    statusMessage.type === "success"
-                      ? "border-[var(--color-seal)]/30 bg-[var(--color-seal-soft)] text-[var(--color-seal)]"
-                      : "border-[var(--color-flag-border)] bg-[var(--color-flag-surface)] text-[var(--color-flag)]"
-                  }`}
-                >
-                  {statusMessage.type === "success" ? (
-                    <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  )}
-                  <span>{statusMessage.text}</span>
-                </div>
-              )}
-            </form>
-          </div>
-
-          {/* Ingested Documents Table */}
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-paper)] p-6 shadow-xs">
-            <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-4 mb-5">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-canvas)] text-[var(--color-ink)]">
-                  <Database className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-medium text-[var(--color-ink)]">
-                    Ingested Knowledge Documents
-                  </h3>
-                  <p className="text-xs text-[var(--color-muted)]">
-                    Documents active in the Azure AI Search index ({documents.length} total)
-                  </p>
-                </div>
-              </div>
+        <div className="mx-auto max-w-4xl space-y-6">
+          {/* Hub Tab Switcher */}
+          <div className="border-b border-[var(--color-border)] pb-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab("tickets")}
+                className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                  activeTab === "tickets"
+                    ? "bg-[var(--color-ink)] text-white shadow-xs"
+                    : "bg-[var(--color-paper)] text-[var(--color-muted)] hover:text-[var(--color-ink)] border border-[var(--color-border)] hover:bg-[var(--color-canvas)]"
+                }`}
+              >
+                <FileQuestion className="h-3.5 w-3.5" />
+                <span>Employee Concerns & Tickets</span>
+              </button>
 
               <button
-                onClick={fetchDocuments}
-                disabled={isLoadingDocs}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-ink)] rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-canvas)] transition-all cursor-pointer"
-                title="Refresh document list"
+                type="button"
+                onClick={() => setActiveTab("documents")}
+                className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                  activeTab === "documents"
+                    ? "bg-[var(--color-ink)] text-white shadow-xs"
+                    : "bg-[var(--color-paper)] text-[var(--color-muted)] hover:text-[var(--color-ink)] border border-[var(--color-border)] hover:bg-[var(--color-canvas)]"
+                }`}
               >
-                <RefreshCw className={`h-3.5 w-3.5 ${isLoadingDocs ? "animate-spin" : ""}`} />
-                Refresh
+                <UploadCloud className="h-3.5 w-3.5" />
+                <span>Document Onboarding Pipeline</span>
               </button>
             </div>
-
-            {isLoadingDocs ? (
-              <div className="py-12 text-center text-sm text-[var(--color-muted)]">
-                Loading ingested documents...
-              </div>
-            ) : documents.length === 0 ? (
-              <div className="py-12 text-center text-sm text-[var(--color-muted)]">
-                No policy documents indexed yet. Upload one above.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-[var(--color-border)] text-[var(--color-muted)] font-medium">
-                      <th className="pb-3 pt-1 px-3">Document Title / File</th>
-                      <th className="pb-3 pt-1 px-3">Status</th>
-                      <th className="pb-3 pt-1 px-3">Chunks</th>
-                      <th className="pb-3 pt-1 px-3">Uploaded</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--color-border)]">
-                    {documents.map((doc) => (
-                      <tr key={doc.filename} className="hover:bg-[var(--color-canvas)]/50 transition-colors">
-                        <td className="py-3 px-3">
-                          <div className="font-medium text-[var(--color-ink)] text-sm">
-                            {doc.title}
-                          </div>
-                          <div className="text-[11px] font-mono text-[var(--color-muted)]">
-                            {doc.filename}
-                          </div>
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-seal-soft)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-seal)] border border-[var(--color-seal)]/20">
-                            <CheckCircle2 className="h-3 w-3" />
-                            {doc.status.toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="inline-flex items-center gap-1 font-mono text-xs text-[var(--color-ink-soft)]">
-                            <Layers className="h-3 w-3 text-[var(--color-muted)]" />
-                            {doc.chunks_count} chunks
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 text-[var(--color-muted)]">
-                          <span className="inline-flex items-center gap-1 text-[11px]">
-                            <Calendar className="h-3 w-3" />
-                            {new Date(doc.uploaded_at).toLocaleDateString(undefined, {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
+
+          {/* Tab 1: Concerns & Tickets */}
+          {activeTab === "tickets" && <AdminTicketsTab />}
+
+          {/* Tab 2: Document Pipeline */}
+          {activeTab === "documents" && (
+            <div className="space-y-8">
+              {/* Pipeline Description */}
+              <div className="pb-1">
+                <h3
+                  className="text-lg font-medium text-[var(--color-ink)]"
+                  style={{ fontFamily: "var(--font-stack-serif)" }}
+                >
+                  Document Ingestion & Index Pipeline
+                </h3>
+                <p className="mt-0.5 text-xs text-[var(--color-muted)]">
+                  Upload company policy documents to chunk, embed, and index into Azure AI Search for live agent retrieval.
+                </p>
+              </div>
+
+              {/* Upload Card */}
+              <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-paper)] p-6 shadow-xs">
+                <div className="flex items-center gap-2.5 border-b border-[var(--color-border)] pb-4 mb-5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-seal-soft)] text-[var(--color-seal)]">
+                    <UploadCloud className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-medium text-[var(--color-ink)]">
+                      Upload New Policy Document
+                    </h3>
+                    <p className="text-xs text-[var(--color-muted)]">
+                      Supported formats: Markdown (.md), Text (.txt), PDF (.pdf)
+                    </p>
+                  </div>
+                </div>
+
+                <form onSubmit={handleUpload} className="space-y-4">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+                    <label className="flex-1 flex items-center gap-3 cursor-pointer rounded-xl border border-dashed border-[var(--color-border-strong)] bg-[var(--color-canvas)] px-4 py-3 hover:border-[var(--color-seal)] transition-colors">
+                      <FileText className="h-5 w-5 text-[var(--color-muted)] shrink-0" />
+                      <span className="text-sm font-medium text-[var(--color-ink)] truncate">
+                        {selectedFile ? selectedFile.name : "Choose a policy document..."}
+                      </span>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".md,.txt,.pdf,.docx"
+                        onChange={handleFileSelect}
+                        className="sr-only"
+                      />
+                    </label>
+
+                    <button
+                      type="submit"
+                      disabled={isUploading || !selectedFile}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-[var(--color-ink)] px-6 py-3 text-sm font-medium text-white shadow-xs hover:bg-[var(--color-ink-soft)] disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0 cursor-pointer"
+                    >
+                      {isUploading ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 animate-spin" />
+                          Uploading & Ingesting...
+                        </>
+                      ) : (
+                        <>
+                          <UploadCloud className="h-4 w-4" />
+                          Upload Document
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Status Message */}
+                  {statusMessage && (
+                    <div
+                      className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 text-xs font-medium transition-all ${
+                        statusMessage.type === "success"
+                          ? "border-[var(--color-seal)]/30 bg-[var(--color-seal-soft)] text-[var(--color-seal)]"
+                          : "border-[var(--color-flag-border)] bg-[var(--color-flag-surface)] text-[var(--color-flag)]"
+                      }`}
+                    >
+                      {statusMessage.type === "success" ? (
+                        <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                      )}
+                      <span>{statusMessage.text}</span>
+                    </div>
+                  )}
+                </form>
+              </div>
+
+              {/* Ingested Documents Table */}
+              <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-paper)] p-6 shadow-xs">
+                <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-4 mb-5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-canvas)] text-[var(--color-ink)]">
+                      <Database className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-medium text-[var(--color-ink)]">
+                        Ingested Knowledge Documents
+                      </h3>
+                      <p className="text-xs text-[var(--color-muted)]">
+                        Documents active in the Azure AI Search index ({documents.length} total)
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={fetchDocuments}
+                    disabled={isLoadingDocs}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-ink)] rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-canvas)] transition-all cursor-pointer"
+                    title="Refresh document list"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isLoadingDocs ? "animate-spin" : ""}`} />
+                    Refresh
+                  </button>
+                </div>
+
+                {isLoadingDocs ? (
+                  <div className="py-12 text-center text-sm text-[var(--color-muted)]">
+                    Loading ingested documents...
+                  </div>
+                ) : documents.length === 0 ? (
+                  <div className="py-12 text-center text-sm text-[var(--color-muted)]">
+                    No policy documents indexed yet. Upload one above.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-[var(--color-border)] text-[var(--color-muted)] font-medium">
+                          <th className="pb-3 pt-1 px-3">Document Title / File</th>
+                          <th className="pb-3 pt-1 px-3">Status</th>
+                          <th className="pb-3 pt-1 px-3">Chunks</th>
+                          <th className="pb-3 pt-1 px-3">Uploaded</th>
+                          <th className="pb-3 pt-1 px-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--color-border)]">
+                        {documents.map((doc) => (
+                          <tr key={doc.filename} className="hover:bg-[var(--color-canvas)]/50 transition-colors">
+                            <td className="py-3 px-3">
+                              <div className="font-medium text-[var(--color-ink)] text-sm">
+                                {doc.title}
+                              </div>
+                              <div className="text-[11px] font-mono text-[var(--color-muted)]">
+                                {doc.filename}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--color-seal-soft)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--color-seal)] border border-[var(--color-seal)]/20">
+                                <CheckCircle2 className="h-3 w-3" />
+                                {doc.status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="inline-flex items-center gap-1 font-mono text-xs text-[var(--color-ink-soft)]">
+                                <Layers className="h-3 w-3 text-[var(--color-muted)]" />
+                                {doc.chunks_count} chunks
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-[var(--color-muted)]">
+                              <span className="inline-flex items-center gap-1 text-[11px]">
+                                <Calendar className="h-3 w-3" />
+                                {new Date(doc.uploaded_at).toLocaleDateString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                onClick={() => handleDeleteDocument(doc.document_id, doc.filename)}
+                                title="Delete document and remove all chunks from Azure AI Search"
+                                className="inline-flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline text-[11px]">Delete</span>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

@@ -29,6 +29,8 @@ st.divider()
 st.header("Evaluation Results")
 
 evaluation_file = Path("evaluation/results/day3-results.json")
+if not evaluation_file.exists():
+    evaluation_file = Path(__file__).resolve().parent.parent / "evaluation/results/day3-results.json"
 
 if evaluation_file.exists():
 

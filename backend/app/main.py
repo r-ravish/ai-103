@@ -20,21 +20,26 @@ Content Safety configuration (optional — see backend/.env.example):
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.content_safety import ContentSafetyClient
 from app.deps import require_employee
 from app.foundry_agent import FoundryAgentService
-from db.models import User
+from db.database import get_db
+from db.models import EscalationEvent, Ticket, User
 from routes.auth import router as auth_router
 from routes.feedback import router as feedback_router
 from routes.tickets import router as tickets_router
 from routes.onboarding import router as onboarding_router
+from routes.admin_tickets import router as admin_tickets_router
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +88,7 @@ app = FastAPI(
 
 app.include_router(auth_router)
 app.include_router(tickets_router)
+app.include_router(admin_tickets_router)
 app.include_router(onboarding_router)
 app.include_router(feedback_router)
 
@@ -154,7 +160,11 @@ def health() -> dict[str, str]:
 
 
 @app.post("/chat", response_model=ChatResponse, tags=["chat"])
-def chat(request: ChatRequest, user: User = Depends(require_employee)) -> ChatResponse:
+async def chat(
+    request: ChatRequest,
+    user: User = Depends(require_employee),
+    db: AsyncSession = Depends(get_db),
+) -> ChatResponse:
     """
     Answer an employee question using the persisted Foundry agent.
 
@@ -190,7 +200,7 @@ def chat(request: ChatRequest, user: User = Depends(require_employee)) -> ChatRe
 
     # ── Step 2: Call the Foundry agent ───────────────────────────────────────
     try:
-        result = foundry_service.ask(request.question)
+        result = await asyncio.to_thread(foundry_service.ask, request.question)
     except Exception as exc:
         logger.exception("Error calling Foundry agent")
         raise HTTPException(
@@ -216,6 +226,27 @@ def chat(request: ChatRequest, user: User = Depends(require_employee)) -> ChatRe
                 ticket_id=None,
             )
 
+    # ── Step 4: Attribute escalation ticket to authenticated employee ───────
+    ticket_id = result.get("ticket_id")
+    if ticket_id:
+        try:
+            ticket = (
+                await db.execute(select(Ticket).where(Ticket.ticket_id == ticket_id))
+            ).scalar_one_or_none()
+            if ticket:
+                ticket.created_by_id = user.id
+                escalation_event = EscalationEvent(
+                    response_id=result.get("response_id"),
+                    question=request.question,
+                    reason=result.get("escalation_reason") or "knowledge_gap",
+                    ticket_id=ticket.id,
+                    success=True,
+                )
+                db.add(escalation_event)
+                await db.flush()
+        except Exception as db_exc:
+            logger.warning("Failed to link ticket %s to user %s: %s", ticket_id, user.id, db_exc)
+
     return ChatResponse(
         answer=result["answer"],
         citations=[Citation(**c) for c in result.get("citations", [])],
@@ -223,5 +254,5 @@ def chat(request: ChatRequest, user: User = Depends(require_employee)) -> ChatRe
         escalation_reason=result.get("escalation_reason"),
         action_taken=result.get("action_taken", False),
         action_type=result.get("action_type"),
-        ticket_id=result.get("ticket_id"),
+        ticket_id=ticket_id,
     )

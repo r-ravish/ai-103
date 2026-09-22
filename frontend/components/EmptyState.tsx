@@ -32,8 +32,8 @@ export default function EmptyState({ onSelectSuggestion }: EmptyStateProps) {
         Ask about company policy
       </h2>
       <p className="mt-1.5 max-w-xs text-[15px] leading-relaxed text-[var(--color-muted)]">
-        Answers are grounded in the pilot knowledge base and cited back to
-        their source document.
+        Answers are grounded in official company policy documents and cited back to
+        their source.
       </p>
       <div className="w-full text-left">
         <SuggestedQuestions onSelect={onSelectSuggestion} />
