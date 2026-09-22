@@ -258,6 +258,8 @@ export default function AdminTicketsTab() {
 
       setFeedbackMsg({ type: "success", text: `Admin response saved for ${ticketId}.` });
       setTimeout(() => setFeedbackMsg(null), 3000);
+      setFeedbackMsg({ type: "success", text: `Employee response saved for ${ticketId}. The employee will see this when checking their ticket.` });
+      setTimeout(() => setFeedbackMsg(null), 4000);
     } catch (err) {
       setFeedbackMsg({ type: "error", text: "Failed to save response." });
     } finally {
@@ -660,36 +662,92 @@ export default function AdminTicketsTab() {
                   </div>
                 )}
 
-                {/* Admin Management Section: Status & Notes CRUD */}
-                <div className="border-t border-[var(--color-border)] pt-3.5 space-y-2.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-medium text-[var(--color-muted)]">
-                        Update Status:
-                      </span>
-                      <select
-                        value={ticket.status}
-                        onChange={(e) => handleStatusChange(ticket.ticket_id, e.target.value)}
-                        disabled={isPending}
-                        className="rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas)] px-2 py-1 text-xs font-medium text-[var(--color-ink)] focus:outline-none focus:border-[var(--color-seal)] cursor-pointer"
-                      >
-                        <option value="open">Open</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="resolved">Resolved</option>
-                        <option value="closed">Closed</option>
-                      </select>
-                    </div>
+                {/* Admin Management Section: Status, Notes, and Employee Response */}
+                <div className="border-t border-[var(--color-border)] pt-3.5 space-y-3.5">
+                  {/* Status row */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-medium text-[var(--color-muted)]">
+                      Update Status:
+                    </span>
+                    <select
+                      value={ticket.status}
+                      onChange={(e) => handleStatusChange(ticket.ticket_id, e.target.value)}
+                      disabled={isPending}
+                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas)] px-2 py-1 text-xs font-medium text-[var(--color-ink)] focus:outline-none focus:border-[var(--color-seal)] cursor-pointer"
+                    >
+                      <option value="open">Open</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </div>
 
-                    <div className="flex items-center gap-2">
+                  {/* Response to Employee — VISIBLE TO EMPLOYEE */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-[var(--color-ink)]">
+                          Response to Employee
+                        </span>
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-seal-soft)] border border-[var(--color-seal)]/20 px-2 py-0.5 text-[10px] font-medium text-[var(--color-seal)]">
+                          Visible to employee
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleSaveResponse(ticket.ticket_id)}
+                        disabled={isPending}
+                        className="flex items-center gap-1 text-xs font-medium bg-[var(--color-seal)] text-white px-3 py-1 rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+                      >
+                        Save Response
+                      </button>
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={editingResponses[ticket.ticket_id] ?? ""}
+                      onChange={(e) =>
+                        setEditingResponses({
+                          ...editingResponses,
+                          [ticket.ticket_id]: e.target.value,
+                        })
+                      }
+                      placeholder="Write a brief 1–2 line reply for the employee (e.g. 'We have reviewed your concern and updated the policy — please re-read the IT Security document.')…"
+                      className="w-full rounded-xl border border-[var(--color-seal)]/30 bg-[var(--color-seal-soft)]/30 p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
+                    />
+                  </div>
+
+                  {/* Internal Admin Notes — NOT visible to employee */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-[var(--color-ink)]">
+                          Internal Admin Notes
+                        </span>
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-canvas)] border border-[var(--color-border)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-muted)]">
+                          Internal only
+                        </span>
+                      </div>
                       <button
                         onClick={() => handleSaveNotes(ticket.ticket_id)}
                         disabled={isPending}
                         className="flex items-center gap-1 text-xs font-medium bg-[var(--color-ink)] text-white px-3 py-1 rounded-lg hover:bg-[var(--color-ink-soft)] transition-colors cursor-pointer"
                       >
-                        Save Admin Note
+                        Save Note
                       </button>
                     </div>
+                    <textarea
+                      rows={2}
+                      value={editingNotes[ticket.ticket_id] ?? ""}
+                      onChange={(e) =>
+                        setEditingNotes({
+                          ...editingNotes,
+                          [ticket.ticket_id]: e.target.value,
+                        })
+                      }
+                      placeholder="Add internal review notes, action steps, or escalation plan (not shown to the employee)…"
+                      className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
+                    />
                   </div>
+
 
                   {/* Admin Notes Textarea */}
                   <textarea
@@ -728,8 +786,10 @@ export default function AdminTicketsTab() {
                     placeholder="Add a 1-2 line response for the employee to see when they check ticket status..."
                     className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
                   />
+
                 </div>
               </div>
+
             );
           })}
         </div>

@@ -252,6 +252,7 @@ async def create_admin_ticket(
         acknowledged_at=now if payload.is_acknowledged else None,
         acknowledged_by_id=admin.id if payload.is_acknowledged else None,
         admin_notes=payload.admin_notes,
+        admin_response=payload.admin_response,
         created_by_id=creator_user.id if creator_user else admin.id,
     )
     db.add(ticket)
