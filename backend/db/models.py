@@ -10,6 +10,10 @@ Five core entities:
     Feedback        -- per-response thumbs up/down ratings from employees
     EscalationEvent -- audit trail for every automatic escalation
 
+Two conversation-memory entities (added for multi-turn persistence):
+    Conversation        -- a chat session owned by a User
+    ConversationMessage -- a single user/assistant turn within a Conversation
+
 All models use Integer primary keys with a surrogate UUID business key where
 the domain expects a human-readable identifier (ticket_id, document_id, etc.).
 
@@ -82,6 +86,12 @@ class FeedbackRating(str, enum.Enum):
     down = "down"
 
 
+class ConversationMessageRole(str, enum.Enum):
+    """Role of a message within a persisted conversation."""
+    user      = "user"
+    assistant = "assistant"
+
+
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class User(Base):
@@ -111,6 +121,7 @@ class User(Base):
     documents     : Mapped[list[Document]]       = relationship("Document",        back_populates="uploaded_by")
     tickets       : Mapped[list[Ticket]]         = relationship("Ticket",          back_populates="created_by", foreign_keys="[Ticket.created_by_id]")
     feedback_list : Mapped[list[Feedback]]       = relationship("Feedback",        back_populates="user")
+    conversations : Mapped[list[Conversation]]   = relationship("Conversation",    back_populates="user", cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("email", name="uq_users_email"),
@@ -283,4 +294,80 @@ class EscalationEvent(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<EscalationEvent id={self.id} reason={self.reason!r} success={self.success}>"        )
+            f"<EscalationEvent id={self.id} reason={self.reason!r} success={self.success}>"
+        )
+
+
+class Conversation(Base):
+    """
+    A multi-turn chat session belonging to a single authenticated user.
+
+    title is auto-set to the first 80 chars of the opening question.
+    last_response_id stores the Foundry Responses API response.id from the
+    most recent assistant turn, enabling continuation via previous_response_id.
+    """
+    __tablename__ = "conversations"
+
+    id               : Mapped[int]           = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id          : Mapped[int]           = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    title            : Mapped[str | None]    = mapped_column(String(512), nullable=True)
+    last_response_id : Mapped[str | None]    = mapped_column(String(255), nullable=True)
+    created_at       : Mapped[datetime]      = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    updated_at       : Mapped[datetime]      = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
+    )
+
+    # Relationships
+    user     : Mapped[User]                          = relationship("User", back_populates="conversations")
+    messages : Mapped[list[ConversationMessage]]     = relationship(
+        "ConversationMessage", back_populates="conversation",
+        cascade="all, delete-orphan", order_by="ConversationMessage.id",
+    )
+
+    __table_args__ = (
+        Index("ix_conversations_user_id",    "user_id"),
+        Index("ix_conversations_updated_at", "updated_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<Conversation id={self.id} user_id={self.user_id} title={self.title!r}>"
+
+
+class ConversationMessage(Base):
+    """
+    A single user or assistant turn within a Conversation.
+
+    citations_json stores the JSON-serialised list of citation dicts so the
+    frontend can re-render source badges after a page refresh.
+    response_id is the Foundry response.id for assistant turns (None for user turns).
+    """
+    __tablename__ = "conversation_messages"
+
+    id              : Mapped[int]                       = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id : Mapped[int]                       = mapped_column(
+        Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    role            : Mapped[ConversationMessageRole]   = mapped_column(
+        Enum(ConversationMessageRole, name="conversationmessagerole"), nullable=False
+    )
+    content         : Mapped[str]                       = mapped_column(Text, nullable=False)
+    citations_json  : Mapped[str | None]                = mapped_column(Text, nullable=True)
+    response_id     : Mapped[str | None]                = mapped_column(String(255), nullable=True)
+    created_at      : Mapped[datetime]                  = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+
+    # Relationships
+    conversation : Mapped[Conversation] = relationship("Conversation", back_populates="messages")
+
+    __table_args__ = (
+        Index("ix_conv_messages_conversation_id", "conversation_id"),
+        Index("ix_conv_messages_created_at",      "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ConversationMessage id={self.id} conv={self.conversation_id} role={self.role}>"

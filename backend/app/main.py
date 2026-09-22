@@ -21,8 +21,10 @@ Content Safety configuration (optional — see backend/.env.example):
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import timezone
 from typing import AsyncGenerator
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -34,8 +36,16 @@ from app.content_safety import ContentSafetyClient
 from app.deps import require_employee
 from app.foundry_agent import FoundryAgentService
 from db.database import get_db
-from db.models import EscalationEvent, Ticket, User
+from db.models import (
+    Conversation,
+    ConversationMessage,
+    ConversationMessageRole,
+    EscalationEvent,
+    Ticket,
+    User,
+)
 from routes.auth import router as auth_router
+from routes.conversations import router as conversations_router
 from routes.feedback import router as feedback_router
 from routes.tickets import router as tickets_router
 from routes.onboarding import router as onboarding_router
@@ -91,6 +101,7 @@ app.include_router(tickets_router)
 app.include_router(admin_tickets_router)
 app.include_router(onboarding_router)
 app.include_router(feedback_router)
+app.include_router(conversations_router)
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +116,13 @@ class ChatRequest(BaseModel):
         max_length=2000,
         examples=["What is the work-from-home policy?"],
         description="The employee's question to the knowledge-base agent.",
+    )
+    conversation_id: int | None = Field(
+        default=None,
+        description=(
+            "ID of an existing conversation to continue.  Omit (or pass null) "
+            "to start a new conversation.  Must be owned by the authenticated user."
+        ),
     )
 
 
@@ -147,6 +165,9 @@ class ChatResponse(BaseModel):
         default=None,
         description="Support ticket ID created during escalation, or None.",
     )
+    conversation_id: int = Field(
+        description="ID of the conversation this turn belongs to (new or existing).",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +195,11 @@ async def chat(
     Requires an authenticated session (employee or admin role). Returns 401
     for unauthenticated requests.
 
+    Conversation memory:
+      Pass conversation_id to continue an existing conversation (multi-turn).
+      Omit it to start a new one.  The returned conversation_id must be sent
+      on every subsequent turn of the same session.
+
     Content Safety screening:
       1. User input is screened before being sent to Foundry.
          Blocked inputs receive a 400 response with a safe refusal message.
@@ -186,7 +212,28 @@ async def chat(
             detail="Foundry agent service is not initialised.",
         )
 
-    # ── Step 1: Screen the user's input ─────────────────────────────────────
+    # ── Step 1: Resolve / create conversation ────────────────────────────────
+    previous_response_id: str | None = None
+    if request.conversation_id is not None:
+        conversation = (
+            await db.execute(
+                select(Conversation).where(Conversation.id == request.conversation_id)
+            )
+        ).scalar_one_or_none()
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
+        if conversation.user_id != user.id:
+            raise HTTPException(status_code=403, detail="You do not own this conversation.")
+        previous_response_id = conversation.last_response_id
+    else:
+        conversation = Conversation(
+            user_id=user.id,
+            title=(request.question[:80] if request.question else "New conversation"),
+        )
+        db.add(conversation)
+        await db.flush()  # populate conversation.id
+
+    # ── Step 2: Screen the user's input ─────────────────────────────────────
     if content_safety_client is not None:
         input_result = content_safety_client.screen_text(request.question)
         if input_result.blocked:
@@ -198,9 +245,13 @@ async def chat(
                 detail=input_result.safe_response,
             )
 
-    # ── Step 2: Call the Foundry agent ───────────────────────────────────────
+    # ── Step 3: Call the Foundry agent ───────────────────────────────────────
     try:
-        result = await asyncio.to_thread(foundry_service.ask, request.question)
+        result = await asyncio.to_thread(
+            foundry_service.ask,
+            request.question,
+            previous_response_id=previous_response_id,
+        )
     except Exception as exc:
         logger.exception("Error calling Foundry agent")
         raise HTTPException(
@@ -208,14 +259,19 @@ async def chat(
             detail=f"Failed to process chat request: {exc}",
         ) from exc
 
-    # ── Step 3: Screen the agent's output ────────────────────────────────────
+    # ── Step 4: Screen the agent's output ────────────────────────────────────
     if content_safety_client is not None:
         output_result = content_safety_client.screen_text(result["answer"])
         if output_result.blocked:
             logger.warning(
                 "Content Safety blocked agent output: %s", output_result.reason
             )
-            # Return the safe refusal message; suppress the raw LLM output.
+            # Persist user turn even when output is blocked.
+            db.add(ConversationMessage(
+                conversation_id=conversation.id,
+                role=ConversationMessageRole.user,
+                content=request.question,
+            ))
             return ChatResponse(
                 answer=output_result.safe_response,
                 citations=[],
@@ -224,9 +280,10 @@ async def chat(
                 action_taken=False,
                 action_type=None,
                 ticket_id=None,
+                conversation_id=conversation.id,
             )
 
-    # ── Step 4: Attribute escalation ticket to authenticated employee ───────
+    # ── Step 5: Attribute escalation ticket to authenticated employee ───────
     ticket_id = result.get("ticket_id")
     if ticket_id:
         try:
@@ -247,12 +304,35 @@ async def chat(
         except Exception as db_exc:
             logger.warning("Failed to link ticket %s to user %s: %s", ticket_id, user.id, db_exc)
 
+    # ── Step 6: Persist conversation turns ──────────────────────────────────
+    citations_list = result.get("citations", [])
+    try:
+        db.add(ConversationMessage(
+            conversation_id=conversation.id,
+            role=ConversationMessageRole.user,
+            content=request.question,
+        ))
+        db.add(ConversationMessage(
+            conversation_id=conversation.id,
+            role=ConversationMessageRole.assistant,
+            content=result["answer"],
+            citations_json=json.dumps(citations_list) if citations_list else None,
+            response_id=result.get("response_id"),
+        ))
+        # Update the conversation's Foundry continuation pointer.
+        from datetime import datetime  # local import to avoid shadowing
+        conversation.last_response_id = result.get("response_id")
+        conversation.updated_at = datetime.now(timezone.utc)
+    except Exception as db_exc:
+        logger.warning("Failed to persist conversation messages: %s", db_exc)
+
     return ChatResponse(
         answer=result["answer"],
-        citations=[Citation(**c) for c in result.get("citations", [])],
+        citations=[Citation(**c) for c in citations_list],
         escalation_required=result.get("escalation_required", False),
         escalation_reason=result.get("escalation_reason"),
         action_taken=result.get("action_taken", False),
         action_type=result.get("action_type"),
         ticket_id=ticket_id,
+        conversation_id=conversation.id,
     )
