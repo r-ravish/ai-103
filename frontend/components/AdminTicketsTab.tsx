@@ -256,6 +256,8 @@ export default function AdminTicketsTab() {
         });
       });
 
+      setFeedbackMsg({ type: "success", text: `Admin response saved for ${ticketId}.` });
+      setTimeout(() => setFeedbackMsg(null), 3000);
       setFeedbackMsg({ type: "success", text: `Employee response saved for ${ticketId}. The employee will see this when checking their ticket.` });
       setTimeout(() => setFeedbackMsg(null), 4000);
     } catch (err) {
@@ -745,6 +747,46 @@ export default function AdminTicketsTab() {
                       className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
                     />
                   </div>
+
+
+                  {/* Admin Notes Textarea */}
+                  <textarea
+                    rows={2}
+                    value={editingNotes[ticket.ticket_id] ?? ""}
+                    onChange={(e) =>
+                      setEditingNotes({
+                        ...editingNotes,
+                        [ticket.ticket_id]: e.target.value,
+                      })
+                    }
+                    placeholder="Add administrative review notes (internal only)..."
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)] mb-3"
+                  />
+
+                  {/* Admin Response Textarea */}
+                  <div className="flex items-center justify-between mb-2 mt-4">
+                    <span className="text-xs font-semibold text-[var(--color-ink)]">Admin Response (Visible to Employee)</span>
+                    <button
+                      onClick={() => handleSaveResponse(ticket.ticket_id)}
+                      disabled={isPending}
+                      className="flex items-center gap-1 text-xs font-medium bg-[var(--color-seal)] text-white px-3 py-1 rounded-lg hover:bg-[var(--color-ink)] transition-colors cursor-pointer"
+                    >
+                      Save Response
+                    </button>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={editingResponses[ticket.ticket_id] ?? ""}
+                    onChange={(e) =>
+                      setEditingResponses({
+                        ...editingResponses,
+                        [ticket.ticket_id]: e.target.value,
+                      })
+                    }
+                    placeholder="Add a 1-2 line response for the employee to see when they check ticket status..."
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
+                  />
+
                 </div>
               </div>
 

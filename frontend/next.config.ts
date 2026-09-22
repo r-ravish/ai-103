@@ -32,6 +32,10 @@ const nextConfig: NextConfig = {
         source: "/api/conversations/:path*",
         destination: `${BACKEND_URL}/conversations/:path*`,
       },
+      {
+        source: "/api/tickets/:path*",
+        destination: `${BACKEND_URL}/internal/tickets/:path*`,
+      },
     ];
   },
 };

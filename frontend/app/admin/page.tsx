@@ -34,7 +34,9 @@ export default function AdminOnboardingPage() {
   const [activeTab, setActiveTab] = useState<"tickets" | "documents">("tickets");
   const [documents, setDocuments] = useState<DocumentStatusItem[]>([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{
     type: "success" | "error";
@@ -73,8 +75,10 @@ export default function AdminOnboardingPage() {
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     setStatusMessage(null);
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFiles(Array.from(e.target.files));
+    } else {
+      setSelectedFiles([]);
     }
   }
 
@@ -88,10 +92,10 @@ export default function AdminOnboardingPage() {
       return;
     }
 
-    if (!selectedFile) {
+    if (selectedFiles.length === 0) {
       setStatusMessage({
         type: "error",
-        text: "Please select a document file first.",
+        text: "Please select at least one document file first.",
       });
       return;
     }
@@ -99,49 +103,62 @@ export default function AdminOnboardingPage() {
     setIsUploading(true);
     setStatusMessage(null);
 
-    try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
+    let successCount = 0;
+    const errors: string[] = [];
 
-      const res = await fetch("/api/onboarding/upload", {
-        method: "POST",
-        credentials: "include",
-        body: formData,
-      });
+    for (const file of selectedFiles) {
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
 
-      if (!res.ok) {
-        let errText = "Upload failed. Please try again.";
-        try {
-          const errData = await res.json();
-          if (typeof errData.detail === "string") errText = errData.detail;
-        } catch {
-          // ignore
+        const res = await fetch("/api/onboarding/upload", {
+          method: "POST",
+          credentials: "include",
+          body: formData,
+        });
+
+        if (!res.ok) {
+          let errText = "Upload failed.";
+          try {
+            const errData = await res.json();
+            if (typeof errData.detail === "string") errText = errData.detail;
+          } catch {
+            // ignore
+          }
+          errors.push(`${file.name}: ${errText}`);
+          continue;
         }
-        throw new Error(errText);
+        successCount++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unexpected error.";
+        errors.push(`${file.name}: ${msg}`);
       }
+    }
 
-      const result: DocumentStatusItem = await res.json();
+    if (errors.length === 0) {
       setStatusMessage({
         type: "success",
-        text: `Document "${result.filename}" successfully uploaded and ingested into Azure AI Search (${result.chunks_count} chunks).`,
+        text: `Successfully uploaded and ingested ${successCount} document(s).`,
       });
-
-      setSelectedFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-
-      // Automatically refresh document list after upload
-      await fetchDocuments();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
+    } else if (successCount > 0) {
       setStatusMessage({
         type: "error",
-        text: msg,
+        text: `Partially succeeded: ${successCount} uploaded, but failed for ${errors.length} file(s). Errors: ${errors.join(", ")}`,
       });
-    } finally {
-      setIsUploading(false);
+    } else {
+      setStatusMessage({
+        type: "error",
+        text: `Failed to upload documents. Errors: ${errors.join(", ")}`,
+      });
     }
+
+    setSelectedFiles([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
+    await fetchDocuments();
+    setIsUploading(false);
   }
 
   async function handleDeleteDocument(documentId: string, filename: string) {
@@ -177,6 +194,70 @@ export default function AdminOnboardingPage() {
       });
     }
   }
+
+  async function handleBulkDelete() {
+    if (selectedDocumentIds.length === 0) return;
+    
+    if (
+      !window.confirm(
+        `Are you sure you want to delete ${selectedDocumentIds.length} document(s)? All indexed chunks will be permanently removed from Azure AI Search.`
+      )
+    ) {
+      return;
+    }
+
+    setIsDeleting(true);
+    let successCount = 0;
+    const errors: string[] = [];
+
+    for (const documentId of selectedDocumentIds) {
+      try {
+        const res = await fetch(`/api/onboarding/documents/${documentId}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
+
+        if (!res.ok) {
+          errors.push(`Failed to delete document ${documentId}`);
+          continue;
+        }
+        successCount++;
+      } catch (err) {
+        errors.push(`Error deleting ${documentId}`);
+      }
+    }
+
+    if (errors.length === 0) {
+      setStatusMessage({
+        type: "success",
+        text: `Successfully deleted ${successCount} document(s).`,
+      });
+      setSelectedDocumentIds([]);
+    } else {
+      setStatusMessage({
+        type: "error",
+        text: `Deleted ${successCount}, but failed for ${errors.length}. Errors: ${errors.join(", ")}`,
+      });
+    }
+
+    await fetchDocuments();
+    setIsDeleting(false);
+  }
+
+  function toggleDocumentSelection(id: string) {
+    setSelectedDocumentIds((prev) =>
+      prev.includes(id) ? prev.filter((docId) => docId !== id) : [...prev, id]
+    );
+  }
+
+  function toggleSelectAll() {
+    if (selectedDocumentIds.length === documents.length) {
+      setSelectedDocumentIds([]);
+    } else {
+      setSelectedDocumentIds(documents.map((d) => d.document_id));
+    }
+  }
+
 
   // If loading auth state, show loading indicator
   if (isAuthLoading) {
@@ -313,11 +394,14 @@ export default function AdminOnboardingPage() {
                     <label className="flex-1 flex items-center gap-3 cursor-pointer rounded-xl border border-dashed border-[var(--color-border-strong)] bg-[var(--color-canvas)] px-4 py-3 hover:border-[var(--color-seal)] transition-colors">
                       <FileText className="h-5 w-5 text-[var(--color-muted)] shrink-0" />
                       <span className="text-sm font-medium text-[var(--color-ink)] truncate">
-                        {selectedFile ? selectedFile.name : "Choose a policy document..."}
+                        {selectedFiles.length > 0
+                          ? `${selectedFiles.length} file(s) selected`
+                          : "Choose policy documents..."}
                       </span>
                       <input
                         ref={fileInputRef}
                         type="file"
+                        multiple
                         accept=".md,.txt,.pdf,.docx"
                         onChange={handleFileSelect}
                         className="sr-only"
@@ -326,7 +410,7 @@ export default function AdminOnboardingPage() {
 
                     <button
                       type="submit"
-                      disabled={isUploading || !selectedFile}
+                      disabled={isUploading || selectedFiles.length === 0}
                       className="flex items-center justify-center gap-2 rounded-xl bg-[var(--color-ink)] px-6 py-3 text-sm font-medium text-white shadow-xs hover:bg-[var(--color-ink-soft)] disabled:opacity-50 disabled:cursor-not-allowed transition-all shrink-0 cursor-pointer"
                     >
                       {isUploading ? (
@@ -380,15 +464,32 @@ export default function AdminOnboardingPage() {
                     </div>
                   </div>
 
-                  <button
-                    onClick={fetchDocuments}
-                    disabled={isLoadingDocs}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-ink)] rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-canvas)] transition-all cursor-pointer"
-                    title="Refresh document list"
-                  >
-                    <RefreshCw className={`h-3.5 w-3.5 ${isLoadingDocs ? "animate-spin" : ""}`} />
-                    Refresh
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {selectedDocumentIds.length > 0 && (
+                      <button
+                        onClick={handleBulkDelete}
+                        disabled={isDeleting}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-all cursor-pointer disabled:opacity-50"
+                        title="Delete selected documents"
+                      >
+                        {isDeleting ? (
+                          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                        Delete Selected ({selectedDocumentIds.length})
+                      </button>
+                    )}
+                    <button
+                      onClick={fetchDocuments}
+                      disabled={isLoadingDocs}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-ink)] rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-canvas)] transition-all cursor-pointer"
+                      title="Refresh document list"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${isLoadingDocs ? "animate-spin" : ""}`} />
+                      Refresh
+                    </button>
+                  </div>
                 </div>
 
                 {isLoadingDocs ? (
@@ -404,6 +505,14 @@ export default function AdminOnboardingPage() {
                     <table className="w-full text-left text-xs">
                       <thead>
                         <tr className="border-b border-[var(--color-border)] text-[var(--color-muted)] font-medium">
+                          <th className="pb-3 pt-1 px-3 w-10">
+                            <input
+                              type="checkbox"
+                              checked={documents.length > 0 && selectedDocumentIds.length === documents.length}
+                              onChange={toggleSelectAll}
+                              className="rounded border-[var(--color-border)] text-[var(--color-seal)] focus:ring-[var(--color-seal)] cursor-pointer"
+                            />
+                          </th>
                           <th className="pb-3 pt-1 px-3">Document Title / File</th>
                           <th className="pb-3 pt-1 px-3">Status</th>
                           <th className="pb-3 pt-1 px-3">Chunks</th>
@@ -413,7 +522,15 @@ export default function AdminOnboardingPage() {
                       </thead>
                       <tbody className="divide-y divide-[var(--color-border)]">
                         {documents.map((doc) => (
-                          <tr key={doc.filename} className="hover:bg-[var(--color-canvas)]/50 transition-colors">
+                          <tr key={doc.filename} className={`hover:bg-[var(--color-canvas)]/50 transition-colors ${selectedDocumentIds.includes(doc.document_id) ? "bg-[var(--color-canvas)]" : ""}`}>
+                            <td className="py-3 px-3">
+                              <input
+                                type="checkbox"
+                                checked={selectedDocumentIds.includes(doc.document_id)}
+                                onChange={() => toggleDocumentSelection(doc.document_id)}
+                                className="rounded border-[var(--color-border)] text-[var(--color-seal)] focus:ring-[var(--color-seal)] cursor-pointer"
+                              />
+                            </td>
                             <td className="py-3 px-3">
                               <div className="font-medium text-[var(--color-ink)] text-sm">
                                 {doc.title}
