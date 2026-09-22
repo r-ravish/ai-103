@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MessageSquare, UploadCloud, LogOut, User as UserIcon, Shield } from "lucide-react";
+import { MessageSquare, UploadCloud, LogOut, User as UserIcon, Shield, PenSquare } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
-export default function Header() {
+interface HeaderProps {
+  onNewChat?: () => void;
+}
+
+export default function Header({ onNewChat }: HeaderProps) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
 
@@ -79,6 +83,17 @@ export default function Header() {
                 <UploadCloud className="h-3.5 w-3.5" />
                 Onboarding
               </Link>
+            )}
+          {/* New Chat button — only shown when user is logged in */}
+            {user && onNewChat && (
+              <button
+                onClick={onNewChat}
+                title="Start a new conversation"
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all text-[var(--color-muted)] hover:text-[var(--color-ink)]`}
+              >
+                <PenSquare className="h-3.5 w-3.5" />
+                New Chat
+              </button>
             )}
           </nav>
 

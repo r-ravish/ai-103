@@ -110,19 +110,45 @@ class FoundryAgentService:
 
         return False, None
 
-    def ask(self, question: str) -> dict[str, Any]:
+    def ask(self, question: str, *, previous_response_id: str | None = None) -> dict[str, Any]:
         """
         Send *question* to the Foundry agent and return a structured reply.
+
+        Parameters
+        ----------
+        question:
+            The user's natural-language question.
+        previous_response_id:
+            Optional Foundry response ID from the preceding turn.  When
+            provided, the agent continues the same thread context (multi-turn
+            RAG quality).  If Foundry rejects the ID (e.g. the response has
+            expired), a warning is logged and the call retries without it.
 
         Returns
         -------
         dict with keys:
           ``answer``      – plain-text response from the agent
           ``citations``   – list of unique source-document metadata dicts
-          ``response_id`` – Foundry response ID (useful for debugging)
+          ``response_id`` – Foundry response ID (useful for debugging / next turn)
         """
-        logger.info("Sending question to agent: %r", question)
-        response = self._client.responses.create(input=question)
+        logger.info("Sending question to agent: %r (prev_response_id=%r)", question, previous_response_id)
+
+        # ── Try to continue an existing conversation thread ──────────────────
+        if previous_response_id:
+            try:
+                response = self._client.responses.create(
+                    input=question,
+                    previous_response_id=previous_response_id,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Foundry rejected previous_response_id=%r (%s) — falling back to fresh call.",
+                    previous_response_id,
+                    exc,
+                )
+                response = self._client.responses.create(input=question)
+        else:
+            response = self._client.responses.create(input=question)
 
         # If the agent needs to call an MCP tool (e.g. create_support_ticket),
         # it will pause and emit mcp_approval_request items.  Approve only the

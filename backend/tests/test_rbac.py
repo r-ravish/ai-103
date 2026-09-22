@@ -49,7 +49,7 @@ def _make_admin(client, db_sessionmaker, email="admin@company.com"):
 
 
 class _FakeFoundryService:
-    def ask(self, question: str) -> dict:
+    def ask(self, question: str, *, previous_response_id: str | None = None) -> dict:
         return {
             "answer": "Employees get 20 days of PTO per year.",
             "citations": [],
@@ -58,6 +58,7 @@ class _FakeFoundryService:
             "action_taken": False,
             "action_type": None,
             "ticket_id": None,
+            "response_id": "fake-response-id-001",
         }
 
 
