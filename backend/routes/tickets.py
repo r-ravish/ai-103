@@ -69,6 +69,7 @@ class TicketResponse(BaseModel):
     description: str
     priority: Literal["low", "medium", "high"]
     status: Literal["open", "in_progress", "resolved", "closed"]
+    admin_response: str | None
     created_at: str
 
 
@@ -93,6 +94,7 @@ def _to_response(ticket: Ticket) -> TicketResponse:
         description=ticket.description,
         priority=ticket.priority.value,
         status=ticket.status.value,
+        admin_response=ticket.admin_response,
         created_at=ticket.created_at.isoformat(),
     )
 

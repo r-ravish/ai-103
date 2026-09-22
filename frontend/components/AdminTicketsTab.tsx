@@ -43,6 +43,7 @@ export interface TicketAdminItem {
   is_acknowledged: boolean;
   acknowledged_at: string | null;
   admin_notes: string | null;
+  admin_response: string | null;
   created_at: string;
   employee: EmployeeSummary | null;
   acknowledged_by: EmployeeSummary | null;
@@ -66,6 +67,7 @@ export default function AdminTicketsTab() {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
+  const [editingResponses, setEditingResponses] = useState<Record<string, string>>({});
   const [updatingTicketId, setUpdatingTicketId] = useState<string | null>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [, startTransition] = useTransition();
@@ -98,10 +100,13 @@ export default function AdminTicketsTab() {
         setData(json);
         // Initialize note draft state
         const drafts: Record<string, string> = {};
+        const responseDrafts: Record<string, string> = {};
         json.tickets.forEach((t) => {
           drafts[t.ticket_id] = t.admin_notes || "";
+          responseDrafts[t.ticket_id] = t.admin_response || "";
         });
         setEditingNotes(drafts);
+        setEditingResponses(responseDrafts);
       } else {
         console.error("Failed to fetch admin tickets:", res.statusText);
       }
@@ -222,6 +227,39 @@ export default function AdminTicketsTab() {
       setTimeout(() => setFeedbackMsg(null), 3000);
     } catch (err) {
       setFeedbackMsg({ type: "error", text: "Failed to save note." });
+    } finally {
+      setUpdatingTicketId(null);
+    }
+  }
+
+  async function handleSaveResponse(ticketId: string) {
+    const responseText = editingResponses[ticketId] ?? "";
+    setUpdatingTicketId(ticketId);
+    try {
+      const res = await fetch(`/api/admin/tickets/${ticketId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ admin_response: responseText }),
+      });
+
+      if (!res.ok) throw new Error("Failed to save response");
+      const updated: TicketAdminItem = await res.json();
+
+      startTransition(() => {
+        setData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            tickets: prev.tickets.map((t) => (t.ticket_id === updated.ticket_id ? updated : t)),
+          };
+        });
+      });
+
+      setFeedbackMsg({ type: "success", text: `Employee response saved for ${ticketId}. The employee will see this when checking their ticket.` });
+      setTimeout(() => setFeedbackMsg(null), 4000);
+    } catch (err) {
+      setFeedbackMsg({ type: "error", text: "Failed to save response." });
     } finally {
       setUpdatingTicketId(null);
     }
@@ -622,52 +660,94 @@ export default function AdminTicketsTab() {
                   </div>
                 )}
 
-                {/* Admin Management Section: Status & Notes CRUD */}
-                <div className="border-t border-[var(--color-border)] pt-3.5 space-y-2.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-medium text-[var(--color-muted)]">
-                        Update Status:
-                      </span>
-                      <select
-                        value={ticket.status}
-                        onChange={(e) => handleStatusChange(ticket.ticket_id, e.target.value)}
-                        disabled={isPending}
-                        className="rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas)] px-2 py-1 text-xs font-medium text-[var(--color-ink)] focus:outline-none focus:border-[var(--color-seal)] cursor-pointer"
-                      >
-                        <option value="open">Open</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="resolved">Resolved</option>
-                        <option value="closed">Closed</option>
-                      </select>
-                    </div>
+                {/* Admin Management Section: Status, Notes, and Employee Response */}
+                <div className="border-t border-[var(--color-border)] pt-3.5 space-y-3.5">
+                  {/* Status row */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-medium text-[var(--color-muted)]">
+                      Update Status:
+                    </span>
+                    <select
+                      value={ticket.status}
+                      onChange={(e) => handleStatusChange(ticket.ticket_id, e.target.value)}
+                      disabled={isPending}
+                      className="rounded-lg border border-[var(--color-border)] bg-[var(--color-canvas)] px-2 py-1 text-xs font-medium text-[var(--color-ink)] focus:outline-none focus:border-[var(--color-seal)] cursor-pointer"
+                    >
+                      <option value="open">Open</option>
+                      <option value="in_progress">In Progress</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </div>
 
-                    <div className="flex items-center gap-2">
+                  {/* Response to Employee — VISIBLE TO EMPLOYEE */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-[var(--color-ink)]">
+                          Response to Employee
+                        </span>
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-seal-soft)] border border-[var(--color-seal)]/20 px-2 py-0.5 text-[10px] font-medium text-[var(--color-seal)]">
+                          Visible to employee
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => handleSaveResponse(ticket.ticket_id)}
+                        disabled={isPending}
+                        className="flex items-center gap-1 text-xs font-medium bg-[var(--color-seal)] text-white px-3 py-1 rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+                      >
+                        Save Response
+                      </button>
+                    </div>
+                    <textarea
+                      rows={2}
+                      value={editingResponses[ticket.ticket_id] ?? ""}
+                      onChange={(e) =>
+                        setEditingResponses({
+                          ...editingResponses,
+                          [ticket.ticket_id]: e.target.value,
+                        })
+                      }
+                      placeholder="Write a brief 1–2 line reply for the employee (e.g. 'We have reviewed your concern and updated the policy — please re-read the IT Security document.')…"
+                      className="w-full rounded-xl border border-[var(--color-seal)]/30 bg-[var(--color-seal-soft)]/30 p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
+                    />
+                  </div>
+
+                  {/* Internal Admin Notes — NOT visible to employee */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-semibold text-[var(--color-ink)]">
+                          Internal Admin Notes
+                        </span>
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-canvas)] border border-[var(--color-border)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-muted)]">
+                          Internal only
+                        </span>
+                      </div>
                       <button
                         onClick={() => handleSaveNotes(ticket.ticket_id)}
                         disabled={isPending}
                         className="flex items-center gap-1 text-xs font-medium bg-[var(--color-ink)] text-white px-3 py-1 rounded-lg hover:bg-[var(--color-ink-soft)] transition-colors cursor-pointer"
                       >
-                        Save Admin Note
+                        Save Note
                       </button>
                     </div>
+                    <textarea
+                      rows={2}
+                      value={editingNotes[ticket.ticket_id] ?? ""}
+                      onChange={(e) =>
+                        setEditingNotes({
+                          ...editingNotes,
+                          [ticket.ticket_id]: e.target.value,
+                        })
+                      }
+                      placeholder="Add internal review notes, action steps, or escalation plan (not shown to the employee)…"
+                      className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
+                    />
                   </div>
-
-                  {/* Admin Notes Textarea */}
-                  <textarea
-                    rows={2}
-                    value={editingNotes[ticket.ticket_id] ?? ""}
-                    onChange={(e) =>
-                      setEditingNotes({
-                        ...editingNotes,
-                        [ticket.ticket_id]: e.target.value,
-                      })
-                    }
-                    placeholder="Add administrative review notes, action steps, or explanation of how this concern was addressed..."
-                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
-                  />
                 </div>
               </div>
+
             );
           })}
         </div>
