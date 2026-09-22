@@ -67,5 +67,26 @@ export interface Message {
   isEscalated?: boolean;
   /** Reason for human escalation. */
   escalationReason?: string;
+  /** Foundry response ID for this turn (used for conversation continuation). */
+  responseId?: string;
   timestamp: number;
+}
+
+/**
+ * Lightweight conversation entry as returned by GET /conversations.
+ */
+export interface Conversation {
+  id: number;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+/**
+ * Full conversation detail including all message turns, as returned by
+ * GET /conversations/{id}.
+ */
+export interface ConversationDetail extends Omit<Conversation, "messageCount"> {
+  messages: Message[];
 }
