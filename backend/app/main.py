@@ -50,6 +50,7 @@ from routes.feedback import router as feedback_router
 from routes.tickets import router as tickets_router
 from routes.onboarding import router as onboarding_router
 from routes.admin_tickets import router as admin_tickets_router
+from routes.bot import router as bot_router
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +103,7 @@ app.include_router(admin_tickets_router)
 app.include_router(onboarding_router)
 app.include_router(feedback_router)
 app.include_router(conversations_router)
+app.include_router(bot_router)
 
 
 # ---------------------------------------------------------------------------
