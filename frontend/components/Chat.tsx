@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { RotateCcw } from "lucide-react";
 import { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
 import { RotateCcw } from "lucide-react";
 import { Message } from "@/types/chat";
@@ -28,7 +26,6 @@ export interface ChatHandle {
 const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
   const { user, refreshUser } = useAuth();
   const { messages, setMessages, conversationId, setConversationId, isHydrated, clearSession } = useChatSession();
-  const { messages, setMessages, clearMessages } = useChatSession();
   const [isLoading, setIsLoading] = useState(false);
   /** True while we are loading the most-recent persisted conversation. */
   const [isRestoring, setIsRestoring] = useState(false);
@@ -162,7 +159,6 @@ const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
             <button
               type="button"
               onClick={handleNewChat}
-              onClick={clearMessages}
               title="Clear conversation and start fresh"
               className="flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-paper)]/80 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-muted)] backdrop-blur-sm transition-all hover:border-[var(--color-border-strong)] hover:text-[var(--color-ink)] shadow-xs cursor-pointer"
             >
