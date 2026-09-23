@@ -1,69 +1,45 @@
 # Enterprise Knowledge Agent
 
-Internal HR and IT policy Q&A system powered by Azure AI Foundry Agents and Azure AI Search RAG.
-Employees ask questions in natural language; the agent retrieves grounded answers with citations from the policy knowledge base.
+## Problem Statement & Solution Overview
+In modern enterprises, employees waste hours searching for HR and IT policies across siloed systems or waiting days for simple IT support requests to be resolved. This fragmented knowledge and slow helpdesk workflow cause massive losses in productivity.
 
----
+Our solution, the **Enterprise Knowledge Agent**, is an internal HR and IT policy Q&A system powered by Agentic AI. Employees can ask questions in natural language, and the agent retrieves grounded answers with citations directly from the policy knowledge base. When an issue requires human intervention (e.g., a broken laptop), the agent securely interfaces with our backend systems via the Model Context Protocol (MCP) to automatically raise a support ticket.
 
-## Team
-
-| Role | Person | Day 1 module |
+## Team Members
+| Role | Person | Focus Area |
 |---|---|---|
-| Lead / RAG foundation | Ravish | `backend/scripts/`, `docs/ingestion-contract.md` |
-| Frontend | Radhika | `frontend/` |
-| Evaluation | Aditya | `evaluation/` |
-| Dashboard | Disha | `dashboard/` |
-| Onboarding module | Rakshit | `onboarding/` (Day 3) |
+| Lead / RAG foundation | Ravish | Backend, Data Ingestion, MCP, Bot Framework |
+| Frontend | Radhika | Next.js Employee Chat Interface |
+| Evaluation | Aditya | Automated Evaluation and Tracing |
+| Dashboard | Disha | Streamlit Metrics Dashboard |
+| Onboarding module | Rakshit | Document Ingestion Module, Admin Portal, Database |
 
 ---
 
-## Module map
+## Solution Architecture & Data Flow
 
-```
-/
-├── backend/
-│   ├── app/            ← FastAPI app (Day 2: POST /chat)
-│   │   └── main.py     ← entry point: uvicorn app.main:app --reload
-│   ├── scripts/        ← one-off utility scripts
-│   │   ├── create_search_index.py    ← creates / updates the Azure AI Search index
-│   │   ├── ingest_pilot_documents.py ← chunks, embeds, and uploads pilot docs
-│   │   └── test_retrieval.py         ← smoke-tests vector retrieval
-│   ├── requirements.txt
-│   └── .env.example    ← copy to .env and fill in your values
-│
-├── docs/
-│   ├── ingestion-contract.md  ← source of truth for chunk schema, embedding config, retrieval
-│   └── pilot-documents/       ← 5 synthetic policy documents (19 indexed chunks)
-│
-├── evaluation/
-│   ├── evaluation_set.json    ← 22 graded questions for automated evaluation (v3.0)
-│   ├── evaluation_set.md      ← human-readable companion
-│   ├── run_eval.py            ← Day 4 evaluation script (correctness, citations, escalation)
-│   ├── tracing.md             ← Foundry tracing guide
-│   └── content_safety.md      ← Azure AI Content Safety preparation notes
-│
-├── frontend/                  ← Next.js chat shell (mock backend, real UI)
-├── dashboard/                 ← Streamlit metrics dashboard (connected to live data)
-└── onboarding/                ← Rakshit's document ingestion module (Day 3)
-```
+1. **Document Ingestion**: Administrators upload HR/IT policy documents (PDF/MD) via the Admin Portal. A FastAPI backend chunks the text using `tiktoken` and embeds it using Azure OpenAI (`text-embedding-3-small`). The vectors are securely stored in Azure AI Search.
+2. **Employee Query**: Employees interact with the agent via a Next.js Chat UI or directly through Microsoft Teams (via Bot Framework).
+3. **Grounded Retrieval (RAG)**: The Azure AI Foundry Agent intercepts the query, retrieves the most relevant policy chunks from Azure AI Search, and synthesises a grounded response with accurate citations.
+4. **Taking Action (MCP)**: If the employee requests a support action (e.g., "raise a ticket"), the Agent invokes the MCP tool. The request is securely routed to the FastAPI backend, which creates a ticket in a PostgreSQL database and returns the Ticket ID to the employee.
 
 ---
 
-## Azure resources (Day 1)
+## Technology Stack & AI Services
 
-| Resource | Name | Region |
-|---|---|---|
-| Microsoft Foundry project | `ai-103-enterprise-knowledge-agent` | Central India |
-| Azure AI Search | `ai103-enterprise-search-ravish` | Central India |
-| Azure OpenAI (embedding) | `ai103-openai-embedding` | Korea Central |
-| Search index | `enterprise-knowledge-index` | — |
-| Embedding deployment | `text-embedding-3-small` · Global Standard · 1536 dim | — |
-
-> The embedding resource is in Korea Central (not Central India) because `text-embedding-3-small` was unavailable in the Foundry model catalog for that region. See `docs/ingestion-contract.md` for the full decision log.
+- **AI & ML Services**: 
+  - Azure AI Foundry (Agent Orchestration)
+  - Azure OpenAI (`text-embedding-3-small` and `gpt-4o-mini` models)
+  - Azure AI Search (Vector Database)
+  - Azure AI Content Safety (Input/Output moderation)
+- **Backend**: Python, FastAPI, PostgreSQL, SQLAlchemy, Alembic
+- **Frontend**: Next.js, React, Tailwind CSS
+- **Dashboard**: Python, Streamlit
+- **Integrations**: Model Context Protocol (MCP), Microsoft Bot Framework, Microsoft Teams
 
 ---
 
-## Setup
+## Setup Instructions
 
 ```bash
 # 1. Clone and enter the repo
@@ -81,110 +57,34 @@ pip install -r backend/requirements.txt
 cp backend/.env.example backend/.env
 # Open backend/.env and fill in all values (see .env.example for instructions)
 
-# 5. Run the backend (Day 2+)
+# 5. Run the backend
 cd backend
 uvicorn app.main:app --reload
+
+# 6. Run the MCP Server (In a new terminal)
+cd backend
+python3 mcp_server.py
+# Expose using ngrok: ngrok http 8001 (Then update Azure Foundry Agent with the ngrok URL)
 ```
 
-### Frontend
+### Frontend & Dashboard
 
 ```bash
+# Frontend
 cd frontend
 npm install
 npm run dev   # → http://localhost:3000
+
+# Streamlit Dashboard
+cd dashboard
+streamlit run app.py # → http://localhost:8501
 ```
 
 ---
 
-## Git workflow
+## Testing and Results
 
-| Branch | Purpose |
-|---|---|
-| `main` | Stable release checkpoints — merged from `develop` at day-end milestones |
-| `develop` | Integration branch — all feature branches merge here via PR |
-| `feature/<name>` | One branch per day/feature; PR → `develop` when ready |
-
----
-
-## Key documents
-
-- **`docs/ingestion-contract.md`** — chunk schema, embedding config, retrieval contract. Rakshit's onboarding module must conform to this.
-- **`evaluation/evaluation_set.json`** — 22-question graded evaluation set (v3.0). Aditya's automated runner reads this.
-- **`evaluation/run_eval.py`** — Day 4 evaluation script: correctness, citations, tool calls, and structured escalation scoring.
-- **`evaluation/results/day3-summary.md`** — latest evaluation run results (human-readable).
-- **`evaluation/tracing.md`** — Foundry tracing guide for inspecting query → retrieval → tool → answer.
-- **`frontend/lib/mockResponses.ts`** — the seam to replace when the real backend is ready.
-
----
-
-## Responsible AI
-
-This section documents the mechanisms the Enterprise Knowledge Agent uses to reduce unsupported answers and unsafe behaviour, and the measured results from evaluation.
-
-### 1. Grounded Retrieval
-
-Every answer is generated from chunks retrieved from the enterprise policy knowledge base via Azure AI Search vector retrieval. The agent does not answer from general knowledge alone — it retrieves relevant policy passages first, then generates an answer grounded in those passages.
-
-- Knowledge base: 5 synthetic pilot policy documents (19 indexed chunks)
-- Retrieval: `text-embedding-3-small` embeddings, cosine similarity
-- Chunk metadata: `source_file`, `chunk_id`, `policy_area`
-
-### 2. Citation Display
-
-When the agent answers from the knowledge base, it returns structured citation metadata alongside the answer:
-
-```json
-{
-  "answer": "...",
-  "citations": [{ "source_file": "leave-policy.md", "title": "Leave Policy" }]
-}
-```
-
-Users can verify which policy document the answer was drawn from. The evaluation checks that `citations` contains the expected `source_file` for every answerable question.
-
-### 3. Out-of-Scope Detection and Escalation
-
-When the agent cannot find grounded evidence in the knowledge base, it does not guess. Instead:
-
-1. The backend detects the knowledge gap using marker phrases in the initial agent response.
-2. It automatically triggers the `create_support_ticket` MCP tool to escalate the request to a human reviewer.
-3. The `/chat` response includes structured escalation fields:
-
-```json
-{
-  "escalation_required": true,
-  "escalation_reason": "knowledge_gap",
-  "action_taken": true,
-  "action_type": "escalation",
-  "ticket_id": "TKT-XXXXXXXX"
-}
-```
-
-Every out-of-scope question results in a human-reviewed support ticket, not a hallucinated answer.
-
-### 4. Human Escalation via MCP Tool
-
-The MCP server (`backend/mcp_server.py`) exposes `create_support_ticket` and `get_support_ticket` tools. The Foundry agent uses these tools for:
-
-- **Direct support requests** — employee explicitly asks to create a ticket
-- **Automatic escalation** — agent detects it cannot answer and escalates without being asked
-
-All MCP tool calls require approval via `_approve_mcp_requests` before execution.
-
-### 5. Content Safety Screening
-
-Azure AI Content Safety screens all inputs and outputs through the `/chat` endpoint:
-
-- Input screened before reaching the agent (HTTP 400 on blocked input)
-- Output screened before returning to the client (safe refusal replaces blocked output)
-- Configured severity threshold: `2` (Low — appropriate for enterprise HR context)
-- Passthrough mode available for local development
-
-See `evaluation/content_safety.md` for the full test scenarios and integration notes.
-
-### 6. Evaluation Methodology
-
-The evaluation system (`evaluation/run_eval.py`) tests 22 questions across 7 categories:
+The evaluation system (`evaluation/run_eval.py`) tests 22 questions across 7 categories to ensure the agent performs accurately and safely:
 
 | Category | Questions | What is evaluated |
 |---|---|---|
@@ -196,15 +96,35 @@ The evaluation system (`evaluation/run_eval.py`) tests 22 questions across 7 cat
 | no_tool | 2 | Tool NOT called for policy questions |
 | escalation | 3 | Out-of-corpus scenarios escalate correctly |
 
-Escalation is verified using **structured response fields** (`escalation_required`, `escalation_reason`, `action_taken`, `action_type`), not text matching. Results are written to `evaluation/results/day3-results.json` for dashboard consumption.
+Escalation is verified using structured response fields, not text matching. Results are written to `evaluation/results/day3-results.json` for dashboard consumption. The agent successfully achieves high retrieval quality without hallucinating out-of-scope policies.
 
-### 7. Current Limitations
+### Responsible AI Practices
+- **Grounded Retrieval**: The agent does not answer from general knowledge alone.
+- **Citation Display**: Structured citation metadata ensures transparency.
+- **Content Safety Screening**: Azure AI Content Safety screens all inputs and outputs (severity threshold: Low).
+- **Human Oversight**: Out-of-scope queries automatically trigger an MCP tool to escalate to human reviewers.
 
-- **Pilot corpus only.** Results may not generalise to a full production document set.
-- **Heuristic gap detection.** Knowledge gap detection uses marker phrases. Subtle hallucinations that do not trigger these markers may not be detected.
-- **English only.** Multilingual behaviour has not been evaluated.
-- **No confidence score.** Gap detection is based on language patterns, not a calibrated probability.
-- **Automated-heuristic correctness scoring.** Uses keyword matching, not semantic similarity. Manual review of edge-case results is recommended.
-- **Azure authentication required for full runs.** The evaluation script requires an authenticated Azure environment to run against the real backend.
+---
 
-These limitations are consistent with the scope of a Day 4 pilot evaluation and should be addressed before production deployment.
+## Known Limitations and Future Improvements
+
+### Known Limitations
+- **Pilot corpus only:** Results may not generalise to a full production document set.
+- **Heuristic gap detection:** Knowledge gap detection uses marker phrases. Subtle hallucinations that do not trigger these markers may not be detected.
+- **English only:** Multilingual behaviour has not been evaluated.
+- **Automated-heuristic correctness scoring:** Uses keyword matching, not semantic similarity. Manual review of edge-case results is recommended.
+
+### Future Improvements
+- **Semantic Scoring:** Implement LLM-as-a-judge or semantic similarity for automated evaluation scoring.
+- **Multilingual Support:** Localise the agent prompts and test on non-English policy documents.
+- **External Integrations:** Integrate the MCP tool with enterprise tools like ServiceNow or Jira instead of a local PostgreSQL DB.
+- **Confidence Calibration:** Use calibrated probabilities to drive knowledge gap detection instead of heuristic marker phrases.
+
+---
+
+## Acknowledgments
+
+- **Third-Party Libraries**: Built using powerful open-source libraries including [FastAPI](https://fastapi.tiangolo.com/), [Next.js](https://nextjs.org/), [Streamlit](https://streamlit.io/), [SQLAlchemy](https://www.sqlalchemy.org/), and `tiktoken`.
+- **Azure SDKs**: Extensively utilises the Azure AI Projects SDK and Azure Identity for secure, role-based access.
+- **Datasets**: Uses synthetic HR/IT Policy documents created specifically for this pilot to ensure privacy and safety.
+- **Protocols**: Uses the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) to securely expose backend functionality to the agent.
