@@ -57,5 +57,36 @@ export interface Message {
    * an error state and never a fabricated answer.
    */
   isKnowledgeGap?: boolean;
+  /** True when an MCP tool or system action was executed (e.g. support ticket created). */
+  actionTaken?: boolean;
+  /** Name or title of the action taken (e.g., "Created Support Ticket"). */
+  actionName?: string;
+  /** Generated ticket ID if a ticket was created. */
+  ticketId?: string;
+  /** True when the request was escalated to a human agent. */
+  isEscalated?: boolean;
+  /** Reason for human escalation. */
+  escalationReason?: string;
+  /** Foundry response ID for this turn (used for conversation continuation). */
+  responseId?: string;
   timestamp: number;
+}
+
+/**
+ * Lightweight conversation entry as returned by GET /conversations.
+ */
+export interface Conversation {
+  id: number;
+  title: string | null;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+}
+
+/**
+ * Full conversation detail including all message turns, as returned by
+ * GET /conversations/{id}.
+ */
+export interface ConversationDetail extends Omit<Conversation, "messageCount"> {
+  messages: Message[];
 }

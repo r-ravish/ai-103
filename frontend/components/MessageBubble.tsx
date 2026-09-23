@@ -45,14 +45,14 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
 
   if (isUser) {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] sm:max-w-[70%]">
+      <div className="flex justify-end min-w-0">
+        <div className="max-w-[85%] sm:max-w-[70%] min-w-0">
           <div
-            className="rounded-2xl rounded-br-sm bg-[var(--color-user-bubble)] px-4 py-2.5 text-[15px] leading-relaxed text-[var(--color-user-bubble-text)]"
+            className="rounded-2xl rounded-br-sm bg-[var(--color-user-bubble)] px-4 py-2.5 text-[15px] leading-relaxed text-[var(--color-user-bubble-text)] break-words-anywhere overflow-hidden"
             role="group"
             aria-label="Your message"
           >
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className="whitespace-pre-wrap break-words-anywhere">{message.content}</p>
           </div>
           <div className="text-right">
             <Timestamp value={message.timestamp} />
@@ -68,11 +68,11 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   // error/crash.
   if (message.isKnowledgeGap) {
     return (
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-start gap-2.5 min-w-0">
         <AssistantMark />
-        <div className="max-w-[85%] sm:max-w-[70%]">
+        <div className="max-w-[85%] sm:max-w-[70%] min-w-0 flex-1">
           <div
-            className="flex gap-2.5 rounded-2xl rounded-tl-sm border-l-4 border-[var(--color-flag-border)] bg-[var(--color-flag-surface)] px-4 py-3"
+            className="flex gap-2.5 rounded-2xl rounded-tl-sm border-l-4 border-[var(--color-flag-border)] bg-[var(--color-flag-surface)] px-4 py-3 min-w-0 break-words-anywhere overflow-hidden"
             role="group"
             aria-label="Assistant response: knowledge gap"
           >
@@ -81,11 +81,11 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
               className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-flag)]"
               strokeWidth={1.75}
             />
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-[13px] font-medium text-[var(--color-flag)]">
                 No matching policy found
               </p>
-              <p className="mt-0.5 whitespace-pre-wrap text-[15px] leading-relaxed text-[var(--color-ink)]">
+              <p className="mt-0.5 whitespace-pre-wrap text-[15px] leading-relaxed text-[var(--color-ink)] break-words-anywhere">
                 {message.content}
               </p>
             </div>
@@ -97,20 +97,42 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   }
 
   return (
-    <div className="flex items-start gap-2.5">
+    <div className="flex items-start gap-2.5 min-w-0">
       <AssistantMark />
-      <div className="max-w-[85%] sm:max-w-[70%]">
+      <div className="max-w-[85%] sm:max-w-[70%] min-w-0 flex-1">
         <div
-          className="rounded-2xl rounded-tl-sm border border-[var(--color-border)] bg-[var(--color-paper)] px-4 py-3 shadow-[0_1px_2px_rgba(18,21,27,0.04)]"
+          className="rounded-2xl rounded-tl-sm border border-[var(--color-border)] bg-[var(--color-paper)] px-4 py-3 shadow-[0_1px_2px_rgba(18,21,27,0.04)] min-w-0 break-words-anywhere overflow-hidden"
           role="group"
           aria-label="Assistant response"
         >
-          <p
-            className="whitespace-pre-wrap text-[15px] leading-relaxed text-[var(--color-ink)]"
+          <div
+            className="whitespace-pre-wrap text-[15px] leading-relaxed text-[var(--color-ink)] break-words-anywhere"
             style={{ fontFamily: "var(--font-stack-serif)" }}
           >
             {message.content}
-          </p>
+          </div>
+          {message.actionTaken && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-seal)]/30 bg-[var(--color-seal-soft)] px-3 py-1.5 text-xs font-medium text-[var(--color-seal)] min-w-0 break-words-anywhere">
+              <span className="h-2 w-2 rounded-full bg-[var(--color-seal)] shrink-0" />
+              <span>{message.actionName || "Action Executed"}</span>
+              {message.ticketId && (
+                <span className="font-mono bg-white/60 px-1.5 py-0.5 rounded border border-[var(--color-seal)]/20 break-all">
+                  {message.ticketId}
+                </span>
+              )}
+            </div>
+          )}
+          {message.isEscalated && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-flag-border)] bg-[var(--color-flag-surface)] px-3 py-1.5 text-xs font-medium text-[var(--color-flag)] min-w-0 break-words-anywhere">
+              <span className="h-2 w-2 rounded-full bg-[var(--color-flag)] shrink-0" />
+              <span>Escalated to Human Support</span>
+              {message.escalationReason && (
+                <span className="text-[11px] opacity-80 break-words-anywhere">
+                  ({message.escalationReason})
+                </span>
+              )}
+            </div>
+          )}
           {message.citations && <CitationList citations={message.citations} />}
         </div>
         <Timestamp value={message.timestamp} />
@@ -118,3 +140,4 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
     </div>
   );
 }
+

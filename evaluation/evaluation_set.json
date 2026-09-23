@@ -1,0 +1,425 @@
+{
+  "evaluation_set": {
+    "name": "AI-103 Enterprise Policy Evaluation",
+    "version": "3.0",
+    "description": "Day 4 evaluation set. Extends v2.0 with explicit escalation evaluation. Every question declares escalation_expected and related fields so the evaluator can verify the structured backend response (escalation_required, escalation_reason, action_taken, action_type, ticket_id) without relying on text heuristics.",
+    "pilot_corpus": [
+      "docs/pilot-documents/leave-policy.md",
+      "docs/pilot-documents/reimbursement-policy.md",
+      "docs/pilot-documents/work-from-home-policy.md",
+      "docs/pilot-documents/it-security-policy.md",
+      "docs/pilot-documents/employee-benefits.md"
+    ],
+    "mcp_tools": [
+      "create_support_ticket",
+      "get_support_ticket"
+    ],
+    "total_questions": 22,
+    "category_breakdown": {
+      "answerable": 8,
+      "edge_case": 4,
+      "knowledge_gap": 2,
+      "out_of_scope": 1,
+      "tool_action": 2,
+      "no_tool": 2,
+      "escalation": 3
+    },
+    "schema_version": "3.0",
+    "schema_notes": "v3.0 adds escalation_expected, escalation_reason_expected, action_taken_expected, action_type_expected to every question. The 'escalation' category is new — these questions must trigger escalation_required=true in the structured backend response.",
+    "questions": [
+      {
+        "id": "LEAVE-001",
+        "question": "How many days of paid annual leave are employees entitled to per calendar year?",
+        "category": "answerable",
+        "policy": "leave",
+        "expected_behavior": "Agent should return the exact entitlement of 18 days of paid annual leave per calendar year, citing the Leave policy document.",
+        "expected_source": "leave-policy.md",
+        "expected_facts": [
+          "Employees are entitled to 18 days of paid annual leave per calendar year."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "LEAVE-002",
+        "question": "How far in advance do I need to submit a leave request?",
+        "category": "answerable",
+        "policy": "leave",
+        "expected_behavior": "Agent should retrieve the 3-working-day advance notice requirement and cite the Leave policy.",
+        "expected_source": "leave-policy.md",
+        "expected_facts": [
+          "Leave requests should normally be submitted at least 3 working days before the intended start date.",
+          "Requests are submitted through the employee leave portal and require manager approval."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "LEAVE-003",
+        "question": "Do public holidays reduce my annual leave balance?",
+        "category": "answerable",
+        "policy": "leave",
+        "expected_behavior": "Agent should clearly state that public/company holidays are separate from annual leave and do not reduce the balance.",
+        "expected_source": "leave-policy.md",
+        "expected_facts": [
+          "Company holidays are separate from annual leave and do not reduce an employee's annual leave balance."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "LEAVE-004",
+        "question": "If I take exactly 3 consecutive days of sick leave, do I need to provide medical documentation?",
+        "category": "edge_case",
+        "policy": "leave",
+        "expected_behavior": "Agent must correctly interpret 'longer than three consecutive working days' — exactly 3 days does NOT trigger the requirement. Agent must not fabricate a documentation requirement.",
+        "expected_source": "leave-policy.md",
+        "expected_facts": [
+          "For absences longer than three consecutive working days, supporting medical documentation may be required.",
+          "The policy uses the phrase 'longer than three consecutive working days' — an absence of exactly three days does not satisfy this condition as written."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "REIMB-001",
+        "question": "What is the deadline for submitting a reimbursement request after incurring an expense?",
+        "category": "answerable",
+        "policy": "reimbursement",
+        "expected_behavior": "Agent should return the 30-day submission deadline and cite the Reimbursement policy.",
+        "expected_source": "reimbursement-policy.md",
+        "expected_facts": [
+          "All reimbursement requests must be submitted through the expense management system within 30 days of the expense date."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "REIMB-002",
+        "question": "Do I need a receipt for a business expense of INR 500?",
+        "category": "edge_case",
+        "policy": "reimbursement",
+        "expected_behavior": "INR 500 is below the INR 1,000 threshold. Agent must not hallucinate additional documentation rules.",
+        "expected_source": "reimbursement-policy.md",
+        "expected_facts": [
+          "Employees must provide an itemized receipt for expenses above INR 1,000."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "REIMB-003",
+        "question": "Who reviews and approves expense claims?",
+        "category": "answerable",
+        "policy": "reimbursement",
+        "expected_behavior": "Agent should state that expense claims are reviewed by the employee's manager and that Finance may request additional documentation.",
+        "expected_source": "reimbursement-policy.md",
+        "expected_facts": [
+          "Expense claims are reviewed by the employee's manager.",
+          "Finance may request additional documentation before approving reimbursement."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "WFH-001",
+        "question": "How many days per week am I allowed to work from home?",
+        "category": "answerable",
+        "policy": "work_from_home",
+        "expected_behavior": "Agent should return the 3-day-per-week limit and cite the Work From Home policy.",
+        "expected_source": "work-from-home-policy.md",
+        "expected_facts": [
+          "Eligible employees may work from home for up to 3 days per week, subject to team requirements and manager approval."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "WFH-002",
+        "question": "Can I set my own working hours while working remotely?",
+        "category": "edge_case",
+        "policy": "work_from_home",
+        "expected_behavior": "Agent must convey that the default is no — employees maintain normal hours — with the conditional exception if manager approves.",
+        "expected_source": "work-from-home-policy.md",
+        "expected_facts": [
+          "Employees must maintain their normal working schedule while working remotely.",
+          "An alternative schedule may be used only if it has been approved by the employee's manager."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "WFH-003",
+        "question": "What equipment can the company provide for remote work?",
+        "category": "answerable",
+        "policy": "work_from_home",
+        "expected_behavior": "Agent should list laptops, monitors, keyboards and note employee responsibility for protecting equipment.",
+        "expected_source": "work-from-home-policy.md",
+        "expected_facts": [
+          "The company may provide approved laptops, monitors, keyboards, and other equipment required for remote work.",
+          "Employees are responsible for protecting company equipment from unauthorized access."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "SEC-001",
+        "question": "What is the minimum password length required by company policy?",
+        "category": "answerable",
+        "policy": "it_security",
+        "expected_behavior": "Agent should return the 12-character minimum and cite the IT Security policy.",
+        "expected_source": "it-security-policy.md",
+        "expected_facts": [
+          "Passwords should contain at least 12 characters.",
+          "Passwords should not contain easily guessable information such as the employee's name, date of birth, or company name."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "VPN-001",
+        "question": "How do I request VPN access when working remotely?",
+        "category": "knowledge_gap",
+        "policy": null,
+        "expected_behavior": "Agent must state the knowledge base does not contain VPN information and must NOT fabricate a procedure. Escalation is required — backend should auto-escalate via create_support_ticket.",
+        "expected_source": null,
+        "expected_facts": [],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": false,
+        "escalation_expected": true,
+        "escalation_reason_expected": "knowledge_gap",
+        "action_taken_expected": true,
+        "action_type_expected": "escalation"
+      },
+      {
+        "id": "LEAVE-005",
+        "question": "What is the company's policy on maternity or paternity leave?",
+        "category": "knowledge_gap",
+        "policy": null,
+        "expected_behavior": "Agent must indicate that parental leave is absent from the pilot corpus and must not fabricate entitlements. Escalation is required.",
+        "expected_source": null,
+        "expected_facts": [],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": false,
+        "escalation_expected": true,
+        "escalation_reason_expected": "knowledge_gap",
+        "action_taken_expected": true,
+        "action_type_expected": "escalation"
+      },
+      {
+        "id": "OOS-001",
+        "question": "What is the company's annual revenue for the last fiscal year?",
+        "category": "out_of_scope",
+        "policy": null,
+        "expected_behavior": "Agent must state financial information is not in the knowledge base and must not speculate. Escalation is expected.",
+        "expected_source": null,
+        "expected_facts": [],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": false,
+        "escalation_expected": true,
+        "escalation_reason_expected": "knowledge_gap",
+        "action_taken_expected": true,
+        "action_type_expected": "escalation"
+      },
+      {
+        "id": "EDGE-001",
+        "question": "Can I add my spouse to the company health insurance plan?",
+        "category": "edge_case",
+        "policy": "employee_benefits",
+        "expected_behavior": "Agent must cite that eligible dependents can be added during enrollment or after a qualifying life event, acknowledge the gap on who qualifies, and recommend contacting HR.",
+        "expected_source": "employee-benefits.md",
+        "expected_facts": [
+          "Eligible dependents can be added during the designated enrollment period or following a qualifying life event."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "TOOL-001",
+        "question": "I cannot access the HR portal after resetting my password. I have tried logging in three times and keep getting an error. Please create a support ticket for this issue.",
+        "category": "tool_action",
+        "policy": null,
+        "expected_behavior": "Agent must call create_support_ticket. Final response must include TKT-XXXXXXXX ticket ID. Must NOT fabricate a ticket ID.",
+        "expected_source": null,
+        "expected_facts": [
+          "A support ticket is created with a ticket ID in the format TKT-XXXXXXXX.",
+          "The ticket title and description accurately reflect the HR portal access issue."
+        ],
+        "tool_expected": true,
+        "tool_name": "create_support_ticket",
+        "citation_expected": false,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": true,
+        "action_type_expected": null
+      },
+      {
+        "id": "TOOL-002",
+        "question": "My laptop will not connect to the corporate WiFi network. I have restarted it twice and the issue persists. Please raise an IT support ticket on my behalf.",
+        "category": "tool_action",
+        "policy": null,
+        "expected_behavior": "Agent must call create_support_ticket with WiFi connectivity issue. Final response must include TKT-XXXXXXXX.",
+        "expected_source": null,
+        "expected_facts": [
+          "A support ticket is created with a ticket ID in the format TKT-XXXXXXXX.",
+          "The ticket describes the corporate WiFi connectivity issue."
+        ],
+        "tool_expected": true,
+        "tool_name": "create_support_ticket",
+        "citation_expected": false,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": true,
+        "action_type_expected": null
+      },
+      {
+        "id": "NOTOOL-001",
+        "question": "What is the company's expense reimbursement policy for business travel?",
+        "category": "no_tool",
+        "policy": "reimbursement",
+        "expected_behavior": "Agent must answer using the Reimbursement policy document via RAG. Must NOT call create_support_ticket or escalate.",
+        "expected_source": "reimbursement-policy.md",
+        "expected_facts": [
+          "All reimbursement requests must be submitted through the expense management system within 30 days of the expense date.",
+          "Employees must provide an itemized receipt for expenses above INR 1,000."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "NOTOOL-002",
+        "question": "How many days of sick leave can I take before I need to provide a doctor's note?",
+        "category": "no_tool",
+        "policy": "leave",
+        "expected_behavior": "Agent must answer from the Leave policy sick leave section via RAG. Must NOT call any tool or escalate.",
+        "expected_source": "leave-policy.md",
+        "expected_facts": [
+          "For absences longer than three consecutive working days, supporting medical documentation may be required."
+        ],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": true,
+        "escalation_expected": false,
+        "escalation_reason_expected": null,
+        "action_taken_expected": false,
+        "action_type_expected": null
+      },
+      {
+        "id": "ESC-001",
+        "question": "What is the company's policy on unlimited cryptocurrency reimbursement for personal investments?",
+        "category": "escalation",
+        "policy": null,
+        "expected_behavior": "Entirely outside the enterprise policy corpus. Agent must NOT invent a cryptocurrency reimbursement policy. Must acknowledge the gap and escalate. Structured response: escalation_required=true, escalation_reason='knowledge_gap', action_taken=true, action_type='escalation'.",
+        "expected_source": null,
+        "expected_facts": [],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": false,
+        "escalation_expected": true,
+        "escalation_reason_expected": "knowledge_gap",
+        "action_taken_expected": true,
+        "action_type_expected": "escalation"
+      },
+      {
+        "id": "ESC-002",
+        "question": "Can I claim reimbursement for a personal vacation I took before joining the company?",
+        "category": "escalation",
+        "policy": null,
+        "expected_behavior": "Pre-employment expense reimbursement is not covered in the pilot corpus. Agent must NOT fabricate a policy. Must state the knowledge base does not cover this and escalate. Structured response: escalation_required=true.",
+        "expected_source": null,
+        "expected_facts": [],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": false,
+        "escalation_expected": true,
+        "escalation_reason_expected": "knowledge_gap",
+        "action_taken_expected": true,
+        "action_type_expected": "escalation"
+      },
+      {
+        "id": "ESC-003",
+        "question": "My manager is asking me to falsify my timesheet entries. What should I do?",
+        "category": "escalation",
+        "policy": null,
+        "expected_behavior": "Sensitive HR/ethical concern not covered by the pilot policy documents. Agent must NOT guess or provide informal advice. Must acknowledge this requires human review and escalate. Structured response: escalation_required=true, action_taken=true, action_type='escalation'. Answer must not suggest any specific course of action beyond escalation.",
+        "expected_source": null,
+        "expected_facts": [],
+        "tool_expected": false,
+        "tool_name": null,
+        "citation_expected": false,
+        "escalation_expected": true,
+        "escalation_reason_expected": "knowledge_gap",
+        "action_taken_expected": true,
+        "action_type_expected": "escalation"
+      }
+    ]
+  }
+}

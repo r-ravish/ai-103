@@ -1,10 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useImperativeHandle, forwardRef } from "react";
+import { RotateCcw } from "lucide-react";
 import { Message } from "@/types/chat";
-import { getMockResponse, MOCK_RESPONSE_DELAY_MS } from "@/lib/mockResponses";
+import { sendChatMessage, fetchConversations, fetchConversation } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { useChatSession } from "@/hooks/useChatSession";
 import MessageList from "./MessageList";
 import ChatInput from "./ChatInput";
+import ChatAuthPrompt from "./ChatAuthPrompt";
 import EmptyState from "./EmptyState";
 
 function createId(): string {
@@ -14,10 +18,69 @@ function createId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-export default function Chat() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+/** Handle exposed to the parent page so the Header can trigger a New Chat. */
+export interface ChatHandle {
+  handleNewChat: () => void;
+}
 
+const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
+  const { user, refreshUser } = useAuth();
+  const { messages, setMessages, conversationId, setConversationId, isHydrated, clearSession } = useChatSession();
+  const [isLoading, setIsLoading] = useState(false);
+  /** True while we are loading the most-recent persisted conversation. */
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  // ── On mount / user change: restore the most-recent conversation ───────────
+  useEffect(() => {
+    if (!user) {
+      // User logged out — clear everything.
+      clearSession();
+      return;
+    }
+
+    if (!isHydrated) return; // Wait for sessionStorage to load
+
+    if (messages.length > 0) return; // Active session exists
+
+    let cancelled = false;
+
+    async function restoreLatest() {
+      setIsRestoring(true);
+      try {
+        if (sessionStorage.getItem("force_new_chat") === "true") {
+          return;
+        }
+        const conversations = await fetchConversations();
+        if (cancelled || conversations.length === 0) return;
+
+        const latest = conversations[0]; // already sorted newest-first
+        const msgs = await fetchConversation(latest.id);
+        if (cancelled) return;
+
+        if (msgs.length > 0) {
+          setMessages(msgs);
+          setConversationId(latest.id);
+        }
+      } catch {
+        // Non-fatal: just start fresh
+      } finally {
+        if (!cancelled) setIsRestoring(false);
+      }
+    }
+
+    restoreLatest();
+    return () => { cancelled = true; };
+  }, [user, isHydrated, messages.length, setMessages, setConversationId, clearSession]);
+
+  // ── New Chat: wipe current state and start a fresh conversation ───────────
+  const handleNewChat = useCallback(() => {
+    clearSession();
+  }, [clearSession]);
+
+  // Expose handleNewChat to the parent via ref.
+  useImperativeHandle(ref, () => ({ handleNewChat }), [handleNewChat]);
+
+  // ── Send a message ────────────────────────────────────────────────────────
   async function handleSend(content: string) {
     const userMessage: Message = {
       id: createId(),
@@ -26,40 +89,51 @@ export default function Chat() {
       timestamp: Date.now(),
     };
 
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("force_new_chat");
+    }
+
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
     try {
-      // Artificial delay so the loading state is visible. This is the
-      // seam where a real backend call (fetch to the agent API) would
-      // replace getMockResponse — the rest of the flow stays the same.
-      await new Promise((resolve) =>
-        setTimeout(resolve, MOCK_RESPONSE_DELAY_MS)
-      );
+      const result = await sendChatMessage(content, conversationId);
 
-      const mock = getMockResponse(content);
+      // On the first turn of a new conversation, capture the returned ID.
+      if (result.conversationId != null && conversationId == null) {
+        setConversationId(result.conversationId);
+      }
 
       const assistantMessage: Message = {
         id: createId(),
         role: "assistant",
-        content: mock.content,
-        citations: mock.citations,
-        isKnowledgeGap: mock.isKnowledgeGap,
+        content: result.answer,
+        citations: result.citations,
+        isKnowledgeGap: result.isKnowledgeGap,
+        actionTaken: result.actionTaken,
+        actionName: result.actionName,
+        ticketId: result.ticketId,
+        isEscalated: result.isEscalated,
+        escalationReason: result.escalationReason,
         timestamp: Date.now(),
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
-      // Mock data should never throw, but don't swallow it silently if
-      // something unexpected happens — surface a visible assistant
-      // message rather than failing silently, without pretending it's
-      // a knowledge-gap or a normal grounded answer.
-      console.error("Failed to produce a mock assistant response:", error);
+      console.error("Failed to fetch response from agent API:", error);
+      const errorMessageText =
+        error instanceof Error && error.message
+          ? error.message
+          : "Something went wrong producing a response. Please try again.";
+
+      if (errorMessageText.toLowerCase().includes("not authenticated")) {
+        await refreshUser();
+      }
+
       const errorMessage: Message = {
         id: createId(),
         role: "assistant",
-        content:
-          "Something went wrong producing a response. Please try again.",
+        content: errorMessageText,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, errorMessage]);
@@ -70,14 +144,39 @@ export default function Chat() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {messages.length === 0 ? (
+      {isRestoring ? (
+        <div className="canvas-texture min-h-0 flex-1 bg-[var(--color-canvas)] flex items-center justify-center">
+          <span className="text-xs text-[var(--color-muted)] animate-pulse">Restoring your last conversation…</span>
+        </div>
+      ) : messages.length === 0 ? (
         <div className="canvas-texture min-h-0 flex-1 bg-[var(--color-canvas)]">
           <EmptyState onSelectSuggestion={handleSend} />
         </div>
       ) : (
-        <MessageList messages={messages} isLoading={isLoading} />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {/* New Chat button — top-right corner, visible when conversation is active */}
+          <div className="absolute right-3 top-2 z-10">
+            <button
+              type="button"
+              onClick={handleNewChat}
+              title="Clear conversation and start fresh"
+              className="flex items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-paper)]/80 px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-muted)] backdrop-blur-sm transition-all hover:border-[var(--color-border-strong)] hover:text-[var(--color-ink)] shadow-xs cursor-pointer"
+            >
+              <RotateCcw className="h-3 w-3" />
+              New Chat
+            </button>
+          </div>
+          <MessageList messages={messages} isLoading={isLoading} />
+        </div>
       )}
-      <ChatInput onSend={handleSend} disabled={isLoading} />
+
+      {user ? (
+        <ChatInput onSend={handleSend} disabled={isLoading || isRestoring} />
+      ) : (
+        <ChatAuthPrompt />
+      )}
     </div>
   );
-}
+});
+
+export default Chat;

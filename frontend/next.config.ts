@@ -1,7 +1,43 @@
 import type { NextConfig } from "next";
 
+const BACKEND_URL =
+  process.env.BACKEND_URL ||
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  "http://localhost:8000";
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  async rewrites() {
+    return [
+      {
+        source: "/api/chat",
+        destination: `${BACKEND_URL}/chat`,
+      },
+      {
+        source: "/api/health",
+        destination: `${BACKEND_URL}/health`,
+      },
+      {
+        source: "/api/auth/:path*",
+        destination: `${BACKEND_URL}/auth/:path*`,
+      },
+      {
+        source: "/api/onboarding/:path*",
+        destination: `${BACKEND_URL}/onboarding/:path*`,
+      },
+      {
+        source: "/api/admin/:path*",
+        destination: `${BACKEND_URL}/admin/:path*`,
+      },
+      {
+        source: "/api/conversations/:path*",
+        destination: `${BACKEND_URL}/conversations/:path*`,
+      },
+      {
+        source: "/api/tickets/:path*",
+        destination: `${BACKEND_URL}/internal/tickets/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

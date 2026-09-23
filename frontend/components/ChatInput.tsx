@@ -62,7 +62,8 @@ export default function ChatInput({ onSend, disabled }: ChatInputProps) {
           placeholder="Ask a question about company policy…"
           rows={1}
           disabled={disabled}
-          className="max-h-40 flex-1 resize-none bg-transparent py-2 text-[15px] text-[var(--color-ink)] placeholder:text-[var(--color-muted)] focus:outline-none disabled:opacity-60"
+          style={{ outline: "none", border: "none", boxShadow: "none" }}
+          className="max-h-40 flex-1 resize-none border-0 bg-transparent py-2 text-[15px] text-[var(--color-ink)] placeholder:text-[var(--color-muted)] outline-none !outline-none focus:outline-none focus:!outline-none focus-visible:outline-none focus-visible:!outline-none focus:ring-0 focus-visible:ring-0 disabled:opacity-60"
         />
         <button
           type="submit"

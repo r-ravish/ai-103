@@ -51,7 +51,7 @@ A separate Azure OpenAI resource was created in **Korea Central**, which was als
 | Azure OpenAI resource | `ai103-openai-embedding` |
 | Region | Korea Central |
 | Model | `text-embedding-3-small` |
-| Deployment name | `text-embedding-3-small` *(confirm this matches the value of `AZURE_OPENAI_DEPLOYMENT` in your `.env` — deployment name and model name are independent in Azure and only coincide here because that's what it was named at creation)* |
+| Deployment name | `text-embedding-3-small` *(confirm this matches the value of `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` in your `.env` — deployment name and model name are independent in Azure and only coincide here because that's what it was named at creation)* |
 | Deployment type | Global Standard |
 | Dimensions | 1536 |
 
@@ -122,7 +122,10 @@ Every indexed chunk must conform to the following schema:
 
 The pilot uses **structure-first chunking**.
 
-1. Parse the Markdown document and remove YAML frontmatter before embedding.
+1. Parse the Markdown document and **remove YAML frontmatter** before chunking or embedding.
+   - Frontmatter is stripped and **not parsed**. No frontmatter fields are read by the ingestion pipeline.
+   - `document_id` is derived from the **source filename stem** (e.g. `leave-policy.md` → `leave-policy`), not from any frontmatter field.
+   - `permission_tags` must be supplied by the caller or configured in the ingestion pipeline (currently via `PERMISSION_TAGS_MAP` in `backend/scripts/ingest_pilot_documents.py`). The `permissions_tag` field present in some pilot-document frontmatter is intentionally ignored.
 2. Split the document by Markdown headings/sections.
 3. Keep a section together when it is at or below the configured limit.
 4. When a section exceeds the limit, split that section into token-based chunks.
