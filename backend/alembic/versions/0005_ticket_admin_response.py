@@ -1,26 +1,26 @@
 """
-Add admin_response to tickets.
+Merge migration: joins conversation-memory branch (0004) and
+admin-response branch (0004b) into a single head.
 
 Revision ID: 0005
-Revises: 0004
+Revises: 0004, 0004b
 Create Date: 2026-09-22
-
-Tables created/modified:
-    tickets - added admin_response
 """
 from typing import Sequence, Union
-
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '0005'
-down_revision: Union[str, None] = '0004'
+down_revision: Union[str, Sequence[str], None] = ('0004', '0004b')
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
+
 def upgrade() -> None:
-    op.add_column("tickets", sa.Column("admin_response", sa.Text(), nullable=True))
+    # Both branches have already applied their schema changes independently.
+    # This migration only joins the two branch heads — no DDL needed.
+    pass
+
 
 def downgrade() -> None:
-    op.drop_column("tickets", "admin_response")
+    pass

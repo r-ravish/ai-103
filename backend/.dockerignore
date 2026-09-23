@@ -1,0 +1,16 @@
+# Docker ignore for backend image builds
+# Keeps the image small by excluding dev-only files
+
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+tests/
+.env
+.env.*
+!.env.example
+*.log
+.git/
+.gitignore
+docs/

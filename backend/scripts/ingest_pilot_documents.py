@@ -44,7 +44,16 @@ PERMISSION_TAGS_MAP = {
 
 FRONTMATTER_PATTERN = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 
-encoding = tiktoken.encoding_for_model("text-embedding-3-small")
+_encoding = None
+
+def get_encoding():
+    global _encoding
+    if _encoding is None:
+        try:
+            _encoding = tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            _encoding = tiktoken.encoding_for_model("text-embedding-3-small")
+    return _encoding
 
 
 def strip_frontmatter(text: str) -> str:
@@ -73,7 +82,8 @@ def split_into_sections(text: str, fallback_title: str):
 
 def chunk_text(text: str, max_tokens: int = MAX_TOKENS, overlap: int = OVERLAP_TOKENS):
     """Token-based chunking with overlap, only used when a section exceeds max_tokens."""
-    tokens = encoding.encode(text)
+    enc = get_encoding()
+    tokens = enc.encode(text)
     if len(tokens) <= max_tokens:
         return [text]
 
@@ -81,7 +91,7 @@ def chunk_text(text: str, max_tokens: int = MAX_TOKENS, overlap: int = OVERLAP_T
     start = 0
     while start < len(tokens):
         end = start + max_tokens
-        chunks.append(encoding.decode(tokens[start:end]))
+        chunks.append(enc.decode(tokens[start:end]))
         if end >= len(tokens):
             break
         start = end - overlap
