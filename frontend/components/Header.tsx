@@ -1,12 +1,49 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  Home,
+  MessageSquare,
+  UploadCloud,
+  LogOut,
+  User as UserIcon,
+  Shield,
+  PenSquare,
+} from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+
+interface HeaderProps {
+}
+
 export default function Header() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, logout } = useAuth();
+
+  const handleHomeClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    if (pathname === "/") {
+      window.location.href = "/";
+    } else {
+      router.push("/");
+    }
+  };
+
   return (
-    <header className="border-b border-[var(--color-border)] bg-[var(--color-paper)]">
-      <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-4 sm:px-6">
-        <div className="flex items-center gap-2.5">
+    <header className="border-b border-[var(--color-border)] bg-[var(--color-paper)] sticky top-0 z-30 shadow-xs">
+      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3 sm:px-6">
+        {/* Click logo/title to go back to Home page */}
+        <Link
+          href="/"
+          onClick={handleHomeClick}
+          className="flex items-center gap-2.5 hover:opacity-85 transition-opacity group cursor-pointer"
+          title="Return to Chat Home"
+        >
           <svg
             aria-hidden="true"
             viewBox="0 0 32 32"
-            className="h-7 w-7 shrink-0"
+            className="h-8 w-8 shrink-0 group-hover:scale-105 transition-transform duration-200"
           >
             <rect
               x="1"
@@ -25,22 +62,80 @@ export default function Header() {
               fill="none"
             />
           </svg>
-          <h1
-            className="text-[17px] font-medium tracking-tight text-[var(--color-ink)]"
-            style={{ fontFamily: "var(--font-stack-serif)" }}
-          >
-            Enterprise Knowledge Agent
-          </h1>
-        </div>
-        <div
-          className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-muted)]"
-          aria-label="Environment status: Pilot"
-        >
-          <span
-            aria-hidden="true"
-            className="h-1.5 w-1.5 rounded-full bg-[var(--color-seal)]"
-          />
-          Pilot
+          <div className="flex flex-col">
+            <h1
+              className="text-[17px] font-medium tracking-tight text-[var(--color-ink)]"
+              style={{ fontFamily: "var(--font-stack-serif)" }}
+            >
+              Enterprise Knowledge Agent
+            </h1>
+            <span className="text-[11px] text-[var(--color-muted)] font-sans -mt-0.5">
+              Internal Policy & Knowledge Hub
+            </span>
+          </div>
+        </Link>
+
+        {/* Navigation & User Status */}
+        <div className="flex items-center gap-3">
+          <nav className="flex items-center gap-1 bg-[var(--color-canvas)] p-1 rounded-lg border border-[var(--color-border)]">
+            <Link
+              href="/"
+              onClick={handleHomeClick}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                pathname === "/"
+                  ? "bg-white text-[var(--color-ink)] shadow-xs"
+                  : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+              }`}
+            >
+              <Home className="h-3.5 w-3.5" />
+              Home
+            </Link>
+            {user?.role === "admin" && (
+              <Link
+                href="/admin"
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  pathname.startsWith("/admin")
+                    ? "bg-white text-[var(--color-ink)] shadow-xs"
+                    : "text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+                }`}
+              >
+                <UploadCloud className="h-3.5 w-3.5" />
+                Onboarding
+              </Link>
+            )}
+
+          </nav>
+
+          {/* User profile / Logout */}
+          {user ? (
+            <div className="flex items-center gap-2 border-l border-[var(--color-border)] pl-3 ml-1">
+              <div className="hidden sm:flex flex-col items-end text-right">
+                <span className="text-xs font-semibold font-mono tracking-tight text-[var(--color-ink)] max-w-[140px] truncate">
+                  {user.name && !user.name.toLowerCase().includes("pilot")
+                    ? user.name
+                    : `EMP-${(1000 + (user.id || 1)).toString()}`}
+                </span>
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--color-seal)] flex items-center gap-1">
+                  {user.role === "admin" && <Shield className="h-2.5 w-2.5" />}
+                  {user.role}
+                </span>
+              </div>
+
+              <button
+                onClick={() => logout()}
+                title="Sign out"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-ink)] hover:bg-[var(--color-canvas)] rounded-lg border border-[var(--color-border)] transition-colors cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden md:inline">Sign out</span>
+              </button>
+            </div>
+          ) : (
+            <div className="hidden sm:flex items-center gap-1.5 text-xs font-medium text-[var(--color-muted)] px-2.5 py-1 rounded-md border border-[var(--color-border)] bg-[var(--color-canvas)]">
+              <UserIcon className="h-3.5 w-3.5" />
+              <span>Not signed in</span>
+            </div>
+          )}
         </div>
       </div>
     </header>

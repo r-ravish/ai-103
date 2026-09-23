@@ -1,0 +1,340 @@
+"""
+Enterprise Knowledge Agent — FastAPI application entry point.
+
+Endpoints:
+  GET  /health  – liveness check
+  POST /chat    – ask the persisted Foundry agent a question; returns a
+                  grounded answer with citation metadata.
+                  Both the user question and the agent answer are screened
+                  by Azure AI Content Safety before any data leaves this
+                  service (when credentials are configured).
+
+Run locally:
+    cd backend
+    uvicorn app.main:app --reload
+
+Content Safety configuration (optional — see backend/.env.example):
+    AZURE_CONTENT_SAFETY_ENDPOINT           — enables live screening
+    AZURE_CONTENT_SAFETY_API_KEY            — API key (never commit)
+    AZURE_CONTENT_SAFETY_SEVERITY_THRESHOLD — default 2 (Low/strict)
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+from contextlib import asynccontextmanager
+from datetime import timezone
+from typing import AsyncGenerator
+
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.content_safety import ContentSafetyClient
+from app.deps import require_employee
+from app.foundry_agent import FoundryAgentService
+from db.database import get_db
+from db.models import (
+    Conversation,
+    ConversationMessage,
+    ConversationMessageRole,
+    EscalationEvent,
+    Ticket,
+    User,
+)
+from routes.auth import router as auth_router
+from routes.conversations import router as conversations_router
+from routes.feedback import router as feedback_router
+from routes.tickets import router as tickets_router
+from routes.onboarding import router as onboarding_router
+from routes.admin_tickets import router as admin_tickets_router
+from routes.bot import router as bot_router
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Service instances — created once at startup, released at shutdown.
+# ---------------------------------------------------------------------------
+foundry_service: FoundryAgentService | None = None
+content_safety_client: ContentSafetyClient | None = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Initialise shared resources on startup; release them on shutdown."""
+    global foundry_service, content_safety_client
+
+    logger.info("Startup: initialising ContentSafetyClient")
+    content_safety_client = ContentSafetyClient()
+
+    logger.info("Startup: initialising FoundryAgentService")
+    foundry_service = FoundryAgentService()
+
+    yield
+
+    if foundry_service is not None:
+        logger.info("Shutdown: closing FoundryAgentService")
+        foundry_service.close()
+        foundry_service = None
+
+    content_safety_client = None
+    logger.info("Shutdown: ContentSafetyClient released")
+
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
+app = FastAPI(
+    title="Enterprise Knowledge Agent API",
+    description=(
+        "Internal knowledge-base agent powered by Microsoft Foundry "
+        "and Azure AI Search. Provides grounded, citation-backed answers "
+        "to employee policy questions."
+    ),
+    version="0.2.0",
+    lifespan=lifespan,
+)
+
+app.include_router(auth_router)
+app.include_router(tickets_router)
+app.include_router(admin_tickets_router)
+app.include_router(onboarding_router)
+app.include_router(feedback_router)
+app.include_router(conversations_router)
+app.include_router(bot_router)
+
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+class ChatRequest(BaseModel):
+    """Body for POST /chat."""
+
+    question: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        examples=["What is the work-from-home policy?"],
+        description="The employee's question to the knowledge-base agent.",
+    )
+    conversation_id: int | None = Field(
+        default=None,
+        description=(
+            "ID of an existing conversation to continue.  Omit (or pass null) "
+            "to start a new conversation.  Must be owned by the authenticated user."
+        ),
+    )
+
+
+class Citation(BaseModel):
+    """Metadata for a single source document used in the answer."""
+
+    document_id: str
+    title: str
+    source_file: str
+
+
+class ChatResponse(BaseModel):
+    """Response body for POST /chat."""
+
+    answer: str = Field(description="Grounded plain-text answer from the agent.")
+    citations: list[Citation] = Field(
+        default_factory=list,
+        description="Source documents the agent retrieved to produce the answer.",
+    )
+    escalation_required: bool = Field(
+        default=False,
+        description=(
+            "True when the agent could not find sufficient grounded evidence and the "
+            "question should be escalated to a human reviewer."
+        ),
+    )
+    escalation_reason: str | None = Field(
+        default=None,
+        description="Machine-readable reason for escalation (e.g. 'knowledge_gap'), or None.",
+    )
+    action_taken: bool = Field(
+        default=False,
+        description="True when a backend action (e.g. ticket creation) was successfully performed.",
+    )
+    action_type: str | None = Field(
+        default=None,
+        description="Type of backend action performed (e.g. 'escalation'), or None.",
+    )
+    ticket_id: str | None = Field(
+        default=None,
+        description="Support ticket ID created during escalation, or None.",
+    )
+    conversation_id: int = Field(
+        description="ID of the conversation this turn belongs to (new or existing).",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+@app.get("/health", tags=["ops"])
+def health() -> dict[str, str]:
+    """Liveness check — returns 200 OK when the server is running."""
+    cs_mode = "live" if (content_safety_client and content_safety_client.is_live) else "passthrough"
+    return {"status": "ok", "content_safety": cs_mode}
+
+
+@app.post("/chat", response_model=ChatResponse, tags=["chat"])
+async def chat(
+    request: ChatRequest,
+    user: User = Depends(require_employee),
+    db: AsyncSession = Depends(get_db),
+) -> ChatResponse:
+    """
+    Answer an employee question using the persisted Foundry agent.
+
+    The agent searches the Azure AI Search knowledge base and synthesises a
+    grounded answer. Source-document citations are included in the response.
+
+    Requires an authenticated session (employee or admin role). Returns 401
+    for unauthenticated requests.
+
+    Conversation memory:
+      Pass conversation_id to continue an existing conversation (multi-turn).
+      Omit it to start a new one.  The returned conversation_id must be sent
+      on every subsequent turn of the same session.
+
+    Content Safety screening:
+      1. User input is screened before being sent to Foundry.
+         Blocked inputs receive a 400 response with a safe refusal message.
+      2. The agent's answer is screened before being returned to the user.
+         Blocked outputs are replaced with a safe refusal message.
+    """
+    if foundry_service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Foundry agent service is not initialised.",
+        )
+
+    # ── Step 1: Resolve / create conversation ────────────────────────────────
+    previous_response_id: str | None = None
+    if request.conversation_id is not None:
+        conversation = (
+            await db.execute(
+                select(Conversation).where(Conversation.id == request.conversation_id)
+            )
+        ).scalar_one_or_none()
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
+        if conversation.user_id != user.id:
+            raise HTTPException(status_code=403, detail="You do not own this conversation.")
+        previous_response_id = conversation.last_response_id
+    else:
+        conversation = Conversation(
+            user_id=user.id,
+            title=(request.question[:80] if request.question else "New conversation"),
+        )
+        db.add(conversation)
+        await db.flush()  # populate conversation.id
+
+    # ── Step 2: Screen the user's input ─────────────────────────────────────
+    if content_safety_client is not None:
+        input_result = content_safety_client.screen_text(request.question)
+        if input_result.blocked:
+            logger.warning(
+                "Content Safety blocked user input: %s", input_result.reason
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=input_result.safe_response,
+            )
+
+    # ── Step 3: Call the Foundry agent ───────────────────────────────────────
+    try:
+        result = await asyncio.to_thread(
+            foundry_service.ask,
+            request.question,
+            previous_response_id=previous_response_id,
+        )
+    except Exception as exc:
+        logger.exception("Error calling Foundry agent")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process chat request: {exc}",
+        ) from exc
+
+    # ── Step 4: Screen the agent's output ────────────────────────────────────
+    if content_safety_client is not None:
+        output_result = content_safety_client.screen_text(result["answer"])
+        if output_result.blocked:
+            logger.warning(
+                "Content Safety blocked agent output: %s", output_result.reason
+            )
+            # Persist user turn even when output is blocked.
+            db.add(ConversationMessage(
+                conversation_id=conversation.id,
+                role=ConversationMessageRole.user,
+                content=request.question,
+            ))
+            return ChatResponse(
+                answer=output_result.safe_response,
+                citations=[],
+                escalation_required=False,
+                escalation_reason=None,
+                action_taken=False,
+                action_type=None,
+                ticket_id=None,
+                conversation_id=conversation.id,
+            )
+
+    # ── Step 5: Attribute escalation ticket to authenticated employee ───────
+    ticket_id = result.get("ticket_id")
+    if ticket_id:
+        try:
+            ticket = (
+                await db.execute(select(Ticket).where(Ticket.ticket_id == ticket_id))
+            ).scalar_one_or_none()
+            if ticket:
+                ticket.created_by_id = user.id
+                escalation_event = EscalationEvent(
+                    response_id=result.get("response_id"),
+                    question=request.question,
+                    reason=result.get("escalation_reason") or "knowledge_gap",
+                    ticket_id=ticket.id,
+                    success=True,
+                )
+                db.add(escalation_event)
+                await db.flush()
+        except Exception as db_exc:
+            logger.warning("Failed to link ticket %s to user %s: %s", ticket_id, user.id, db_exc)
+
+    # ── Step 6: Persist conversation turns ──────────────────────────────────
+    citations_list = result.get("citations", [])
+    try:
+        db.add(ConversationMessage(
+            conversation_id=conversation.id,
+            role=ConversationMessageRole.user,
+            content=request.question,
+        ))
+        db.add(ConversationMessage(
+            conversation_id=conversation.id,
+            role=ConversationMessageRole.assistant,
+            content=result["answer"],
+            citations_json=json.dumps(citations_list) if citations_list else None,
+            response_id=result.get("response_id"),
+        ))
+        # Update the conversation's Foundry continuation pointer.
+        from datetime import datetime  # local import to avoid shadowing
+        conversation.last_response_id = result.get("response_id")
+        conversation.updated_at = datetime.now(timezone.utc)
+    except Exception as db_exc:
+        logger.warning("Failed to persist conversation messages: %s", db_exc)
+
+    return ChatResponse(
+        answer=result["answer"],
+        citations=[Citation(**c) for c in citations_list],
+        escalation_required=result.get("escalation_required", False),
+        escalation_reason=result.get("escalation_reason"),
+        action_taken=result.get("action_taken", False),
+        action_type=result.get("action_type"),
+        ticket_id=ticket_id,
+        conversation_id=conversation.id,
+    )

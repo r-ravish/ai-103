@@ -13,14 +13,13 @@ npm run dev
 
 Then open http://localhost:3000.
 
-## What's mocked vs. real
+## Connecting to the backend
 
-- Real: UI, chat state, input handling, citation rendering, knowledge-gap
-  state, loading state, empty state, suggested questions.
-- Mocked: assistant answers. `lib/mockResponses.ts` does simple keyword
-  matching on the question text (leave / reimbursement / work-from-home /
-  everything else -> knowledge gap) and returns canned content plus
-  citation metadata.
+The frontend communicates with the backend `POST /chat` endpoint via `lib/api.ts`.
+
+- By default, Next.js rewrites proxy `/api/chat` to `http://localhost:8000/chat`.
+- Set `BACKEND_URL` in `.env.local` to point the Next.js server rewrite to a different backend host (e.g. `BACKEND_URL=http://localhost:8000`).
+- Alternatively, set `NEXT_PUBLIC_API_URL` to send browser requests directly to a custom endpoint (e.g. `NEXT_PUBLIC_API_URL=http://localhost:8000/chat`).
 
 ## Dependencies
 
@@ -32,10 +31,8 @@ the send button). No other runtime dependencies.
 
 See `types/chat.ts`. The `Citation` fields (`title`, `content`,
 `sourceFile`, `sourcePath`, `documentId`, `chunkIndex`, `documentType`)
-intentionally mirror the retrieval metadata named in
-`../docs/ingestion-contract.md`, so wiring up a real backend later should
-mostly be a mapping exercise in `lib/mockResponses.ts` (or wherever the
-real API call replaces `getMockResponse`), not a UI rewrite.
+mirror the retrieval metadata returned from the knowledge base and mapped
+by `lib/api.ts`.
 
 ## Structure
 
@@ -43,6 +40,6 @@ real API call replaces `getMockResponse`), not a UI rewrite.
 app/            Next.js App Router entry (layout, page, global styles)
 components/     UI components (Header, Chat, MessageList, MessageBubble,
                 ChatInput, CitationList, EmptyState, SuggestedQuestions)
-lib/            Mock data layer
-types/          Frontend-local TypeScript types (not a backend contract)
+lib/            API client (api.ts) and mock responses (mockResponses.ts)
+types/          TypeScript types (chat.ts)
 ```

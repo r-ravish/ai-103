@@ -23,7 +23,7 @@ export default function MessageList({ messages, isLoading }: MessageListProps) {
       aria-live="polite"
       aria-label="Conversation"
     >
-      <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6">
+      <div className="mx-auto flex max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6 min-w-0 w-full">
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
         ))}

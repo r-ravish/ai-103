@@ -71,10 +71,17 @@ body {
   background-position: -8px -8px;
 }
 
-/* Visible keyboard focus, independent of color alone. */
+/* visible keyboard focus, independent of color alone. */
 :focus-visible {
   outline: 2px solid var(--color-seal);
   outline-offset: 2px;
+}
+
+/* Text overflow & break utilities to prevent long text/words from breaking layout boxes */
+.break-words-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  word-wrap: break-word;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -84,3 +91,4 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+

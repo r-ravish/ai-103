@@ -1,0 +1,4 @@
+# This directory holds evaluation run output files (*.jsonl).
+# These files are git-ignored — they are machine-generated artefacts,
+# not source files. Only this .gitkeep is committed to preserve the
+# directory structure in the repository.
