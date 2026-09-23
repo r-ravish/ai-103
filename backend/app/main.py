@@ -66,11 +66,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Initialise shared resources on startup; release them on shutdown."""
     global foundry_service, content_safety_client
 
-    logger.info("Startup: initialising ContentSafetyClient")
-    content_safety_client = ContentSafetyClient()
+    try:
+        logger.info("Startup: initialising ContentSafetyClient")
+        content_safety_client = ContentSafetyClient()
+    except Exception as e:
+        logger.warning("ContentSafetyClient init failed (will run in passthrough mode): %s", e)
 
-    logger.info("Startup: initialising FoundryAgentService")
-    foundry_service = FoundryAgentService()
+    # Initialize Foundry in a background task to avoid blocking the health probe.
+    # DefaultAzureCredential can take 30-60s to resolve in some environments.
+    async def _init_foundry() -> None:
+        global foundry_service
+        try:
+            logger.info("Background: initialising FoundryAgentService")
+            foundry_service = await asyncio.to_thread(FoundryAgentService)
+            logger.info("Background: FoundryAgentService ready")
+        except Exception as e:
+            logger.warning("FoundryAgentService init failed (/chat will return 503): %s", e)
+
+    asyncio.create_task(_init_foundry())
 
     yield
 
@@ -81,6 +94,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     content_safety_client = None
     logger.info("Shutdown: ContentSafetyClient released")
+
 
 
 # ---------------------------------------------------------------------------

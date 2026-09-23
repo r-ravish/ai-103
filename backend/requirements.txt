@@ -7,6 +7,7 @@ tiktoken>=0.7.0
 # ── FastAPI + server (Day 2 — agent core) ────────────────────────────────────
 fastapi>=0.115.0,<1.0.0
 uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
 
 # ── Azure AI Foundry Agents SDK ──────────────────────────────────────────────
 azure-ai-projects>=2.3.0
@@ -20,6 +21,8 @@ openai>=1.68.0
 
 # ── Environment variables ───────────────────────────────────────────────────
 python-dotenv>=1.0.1
+mcp>=1.0.0
+httpx>=0.27.0
 
 # ── PDF parsing (onboarding module) ─────────────────────────────────────────
 pypdf>=4.0.0

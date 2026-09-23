@@ -11,15 +11,18 @@ from mcp.server.transport_security import TransportSecuritySettings
 load_dotenv()
 
 BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
-MCP_HOST: str = os.getenv("MCP_HOST", "127.0.0.1")
+MCP_HOST: str = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT: int = int(os.getenv("MCP_PORT", "8001"))
 
 MCP_PUBLIC_HOST: str = os.getenv("MCP_PUBLIC_HOST", "")
+if MCP_PUBLIC_HOST == "*":
+    MCP_PUBLIC_HOST = ""
 MCP_PUBLIC_ORIGIN: str = f"https://{MCP_PUBLIC_HOST}" if MCP_PUBLIC_HOST else ""
 
 transport_security = TransportSecuritySettings(
     allowed_hosts=[
         *([MCP_PUBLIC_HOST, f"{MCP_PUBLIC_HOST}:*"] if MCP_PUBLIC_HOST else []),
+        "ai103-mcp.graysand-0fffbacf.koreacentral.azurecontainerapps.io",
         "undisputed-zitimobile.ngrok-free.dev",
         "undocked-ditzy-mobile.ngrok-free.dev",
         "127.0.0.1",

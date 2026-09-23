@@ -1,6 +1,8 @@
 import asyncio
 import os
 
+import logging
+logging.basicConfig(level=logging.DEBUG)
 from mcp import Client
 
 
