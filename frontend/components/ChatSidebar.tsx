@@ -90,10 +90,10 @@ export default function ChatSidebar({ onSelectConversation, onNewChat, updateTri
       <div className="p-3 border-b border-[var(--color-border)]">
         <button
           onClick={onNewChat}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-seal)] px-4 py-2.5 text-xs font-medium text-white hover:bg-[var(--color-seal-soft)] transition-colors shadow-sm cursor-pointer"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-seal)] px-4 py-2.5 text-xs font-semibold text-white hover:bg-[var(--color-seal-soft)] transition-colors shadow-xs hover:shadow-sm cursor-pointer"
         >
           <Plus className="h-4 w-4" />
-          New Chat
+          Start New Chat
         </button>
       </div>
       
@@ -115,10 +115,17 @@ export default function ChatSidebar({ onSelectConversation, onNewChat, updateTri
               <li key={conv.id} className="group relative">
                 <button
                   onClick={() => onSelectConversation(conv.id)}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 pr-8 text-left text-[13px] text-[var(--color-ink-soft)] hover:bg-[var(--color-canvas)] hover:text-[var(--color-ink)] transition-colors"
+                  className="w-full text-left p-2.5 rounded-xl border border-transparent hover:border-[var(--color-border)] hover:bg-[var(--color-canvas)] transition-all flex flex-col gap-1 pr-8 hover:shadow-xs group/btn"
                 >
-                  <MessageSquare className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)]" />
-                  <span className="truncate">{conv.title || "New conversation"}</span>
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="h-3.5 w-3.5 shrink-0 text-[var(--color-seal)] group-hover/btn:text-[var(--color-seal-soft)] transition-colors" />
+                    <span className="text-[13px] font-semibold text-[var(--color-ink)] truncate w-full group-hover/btn:text-[var(--color-seal)] transition-colors">{conv.title || "New conversation"}</span>
+                  </div>
+                  <div className="flex items-center justify-between pl-5 pr-1">
+                    <span className="text-[10px] text-[var(--color-muted)] font-medium">
+                      {new Date(conv.updatedAt || conv.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} • {conv.messageCount} msg{conv.messageCount !== 1 ? 's' : ''}
+                    </span>
+                  </div>
                 </button>
                 <button
                   onClick={(e) => handleDelete(e, conv.id)}
