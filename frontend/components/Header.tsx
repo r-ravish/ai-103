@@ -109,18 +109,6 @@ export default function Header() {
           {/* User profile / Logout */}
           {user ? (
             <div className="flex items-center gap-2 border-l border-[var(--color-border)] pl-3 ml-1">
-              <div className="hidden sm:flex flex-col items-end text-right">
-                <span className="text-xs font-semibold font-mono tracking-tight text-[var(--color-ink)] max-w-[140px] truncate">
-                  {user.name && !user.name.toLowerCase().includes("pilot")
-                    ? user.name
-                    : `EMP-${(1000 + (user.id || 1)).toString()}`}
-                </span>
-                <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--color-seal)] flex items-center gap-1">
-                  {user.role === "admin" && <Shield className="h-2.5 w-2.5" />}
-                  {user.role}
-                </span>
-              </div>
-
               <button
                 onClick={() => logout()}
                 title="Sign out"
