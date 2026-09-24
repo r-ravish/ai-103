@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import AdminTicketsTab from "@/components/AdminTicketsTab";
+import AdminEmployeesTab from "@/components/AdminEmployeesTab";
 import { useAuth } from "@/lib/auth-context";
 import {
   UploadCloud,
@@ -18,6 +19,7 @@ import {
   ArrowLeft,
   FileQuestion,
   Trash2,
+  UserPlus,
 } from "lucide-react";
 
 interface DocumentStatusItem {
@@ -31,7 +33,7 @@ interface DocumentStatusItem {
 
 export default function AdminOnboardingPage() {
   const { user, isLoading: isAuthLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"tickets" | "documents">("tickets");
+  const [activeTab, setActiveTab] = useState<"tickets" | "documents" | "employees">("tickets");
   const [documents, setDocuments] = useState<DocumentStatusItem[]>([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -351,6 +353,19 @@ export default function AdminOnboardingPage() {
                 <UploadCloud className="h-3.5 w-3.5" />
                 <span>Document Onboarding Pipeline</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("employees")}
+                className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
+                  activeTab === "employees"
+                    ? "bg-[var(--color-ink)] text-white shadow-xs"
+                    : "bg-[var(--color-paper)] text-[var(--color-muted)] hover:text-[var(--color-ink)] border border-[var(--color-border)] hover:bg-[var(--color-canvas)]"
+                }`}
+              >
+                <UserPlus className="h-3.5 w-3.5" />
+                <span>Employees</span>
+              </button>
             </div>
           </div>
 
@@ -581,6 +596,9 @@ export default function AdminOnboardingPage() {
               </div>
             </div>
           )}
+
+          {/* Tab 3: Employees */}
+          {activeTab === "employees" && <AdminEmployeesTab />}
         </div>
       </main>
     </div>

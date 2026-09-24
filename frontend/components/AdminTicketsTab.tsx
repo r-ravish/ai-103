@@ -682,7 +682,7 @@ export default function AdminTicketsTab() {
                     </select>
                   </div>
 
-                  {/* Response to Employee — VISIBLE TO EMPLOYEE */}
+                  {/* Admin Response (Visible to Employee) */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
@@ -714,79 +714,6 @@ export default function AdminTicketsTab() {
                       className="w-full rounded-xl border border-[var(--color-seal)]/30 bg-[var(--color-seal-soft)]/30 p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
                     />
                   </div>
-
-                  {/* Internal Admin Notes — NOT visible to employee */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] font-semibold text-[var(--color-ink)]">
-                          Internal Admin Notes
-                        </span>
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-[var(--color-canvas)] border border-[var(--color-border)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-muted)]">
-                          Internal only
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => handleSaveNotes(ticket.ticket_id)}
-                        disabled={isPending}
-                        className="flex items-center gap-1 text-xs font-medium bg-[var(--color-ink)] text-white px-3 py-1 rounded-lg hover:bg-[var(--color-ink-soft)] transition-colors cursor-pointer"
-                      >
-                        Save Note
-                      </button>
-                    </div>
-                    <textarea
-                      rows={2}
-                      value={editingNotes[ticket.ticket_id] ?? ""}
-                      onChange={(e) =>
-                        setEditingNotes({
-                          ...editingNotes,
-                          [ticket.ticket_id]: e.target.value,
-                        })
-                      }
-                      placeholder="Add internal review notes, action steps, or escalation plan (not shown to the employee)…"
-                      className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
-                    />
-                  </div>
-
-
-                  {/* Admin Notes Textarea */}
-                  <textarea
-                    rows={2}
-                    value={editingNotes[ticket.ticket_id] ?? ""}
-                    onChange={(e) =>
-                      setEditingNotes({
-                        ...editingNotes,
-                        [ticket.ticket_id]: e.target.value,
-                      })
-                    }
-                    placeholder="Add administrative review notes (internal only)..."
-                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)] mb-3"
-                  />
-
-                  {/* Admin Response Textarea */}
-                  <div className="flex items-center justify-between mb-2 mt-4">
-                    <span className="text-xs font-semibold text-[var(--color-ink)]">Admin Response (Visible to Employee)</span>
-                    <button
-                      onClick={() => handleSaveResponse(ticket.ticket_id)}
-                      disabled={isPending}
-                      className="flex items-center gap-1 text-xs font-medium bg-[var(--color-seal)] text-white px-3 py-1 rounded-lg hover:bg-[var(--color-ink)] transition-colors cursor-pointer"
-                    >
-                      Save Response
-                    </button>
-                  </div>
-                  <textarea
-                    rows={2}
-                    value={editingResponses[ticket.ticket_id] ?? ""}
-                    onChange={(e) =>
-                      setEditingResponses({
-                        ...editingResponses,
-                        [ticket.ticket_id]: e.target.value,
-                      })
-                    }
-                    placeholder="Add a 1-2 line response for the employee to see when they check ticket status..."
-                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] p-2.5 text-xs text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)]"
-                  />
-
                 </div>
               </div>
 

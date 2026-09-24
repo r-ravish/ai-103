@@ -50,6 +50,7 @@ from routes.feedback import router as feedback_router
 from routes.tickets import router as tickets_router
 from routes.onboarding import router as onboarding_router
 from routes.admin_tickets import router as admin_tickets_router
+from routes.admin_users import router as admin_users_router
 from routes.bot import router as bot_router
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,7 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(tickets_router)
 app.include_router(admin_tickets_router)
+app.include_router(admin_users_router)
 app.include_router(onboarding_router)
 app.include_router(feedback_router)
 app.include_router(conversations_router)
