@@ -18,12 +18,16 @@ function createId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-/** Handle exposed to the parent page so the Header can trigger a New Chat. */
 export interface ChatHandle {
   handleNewChat: () => void;
+  loadConversation: (id: number) => Promise<void>;
 }
 
-const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
+interface ChatProps {
+  onChatUpdated?: () => void;
+}
+
+const Chat = forwardRef<ChatHandle>(function Chat({ onChatUpdated }: ChatProps, ref) {
   const { user, refreshUser } = useAuth();
   const { messages, setMessages, conversationId, setConversationId, isHydrated, clearSession } = useChatSession();
   const [isLoading, setIsLoading] = useState(false);
@@ -77,8 +81,25 @@ const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
     clearSession();
   }, [clearSession]);
 
-  // Expose handleNewChat to the parent via ref.
-  useImperativeHandle(ref, () => ({ handleNewChat }), [handleNewChat]);
+  // ── Load a specific conversation ──────────────────────────────────────────
+  const loadConversation = useCallback(async (id: number) => {
+    setIsRestoring(true);
+    try {
+      const msgs = await fetchConversation(id);
+      setMessages(msgs);
+      setConversationId(id);
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("force_new_chat");
+      }
+    } catch (err) {
+      console.error("Failed to load conversation", err);
+    } finally {
+      setIsRestoring(false);
+    }
+  }, [setMessages, setConversationId]);
+
+  // Expose handleNewChat and loadConversation to the parent via ref.
+  useImperativeHandle(ref, () => ({ handleNewChat, loadConversation }), [handleNewChat, loadConversation]);
 
   // ── Send a message ────────────────────────────────────────────────────────
   async function handleSend(content: string) {
@@ -102,6 +123,9 @@ const Chat = forwardRef<ChatHandle>(function Chat(_props, ref) {
       // On the first turn of a new conversation, capture the returned ID.
       if (result.conversationId != null && conversationId == null) {
         setConversationId(result.conversationId);
+        onChatUpdated?.();
+      } else if (result.conversationId != null) {
+        onChatUpdated?.();
       }
 
       const assistantMessage: Message = {
