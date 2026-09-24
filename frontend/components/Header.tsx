@@ -32,7 +32,7 @@ export default function Header() {
 
   return (
     <header className="border-b border-[var(--color-border)] bg-[var(--color-paper)] sticky top-0 z-30 shadow-xs">
-      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3 sm:px-6">
+      <div className="flex w-full items-center justify-between px-4 py-3 sm:px-6">
         {/* Click logo/title to go back to Home page */}
         <Link
           href="/"

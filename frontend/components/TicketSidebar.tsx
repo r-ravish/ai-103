@@ -61,7 +61,7 @@ export default function TicketSidebar() {
   }
 
   return (
-    <div className="w-80 border-l border-[var(--color-border)] bg-[var(--color-paper)] flex flex-col h-full shrink-0 shadow-[-4px_0_12px_rgba(0,0,0,0.02)] transition-all z-10 absolute right-0 top-0 sm:static">
+    <div className="w-80 border-l border-[var(--color-border)] bg-[var(--color-paper)] flex flex-col h-full shadow-[-8px_0_24px_rgba(0,0,0,0.12)] transition-transform z-20 absolute right-0 top-0 animate-in slide-in-from-right-8 duration-300">
       <div className="p-4 border-b border-[var(--color-border)] flex items-center justify-between sticky top-0 bg-[var(--color-paper)] z-10">
         <div className="flex items-center gap-2">
           <Ticket className="w-4 h-4 text-[var(--color-seal)]" />
