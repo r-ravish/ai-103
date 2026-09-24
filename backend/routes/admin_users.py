@@ -53,3 +53,38 @@ async def create_user(
     await db.refresh(user)
 
     return UserResponse.model_validate(user)
+
+
+@router.get(
+    "",
+    response_model=list[UserResponse],
+    summary="List all employees",
+)
+async def list_users(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> list[UserResponse]:
+    users = (await db.execute(select(User).order_by(User.id.desc()))).scalars().all()
+    return [UserResponse.model_validate(u) for u in users]
+
+
+@router.delete(
+    "/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete an employee",
+)
+async def delete_user(
+    user_id: int,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if user.id == admin.id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+        
+    await db.delete(user)
+    await db.commit()
+    return None
