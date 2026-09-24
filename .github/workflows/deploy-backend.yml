@@ -1,0 +1,86 @@
+# =========================================================================== #
+# deploy-backend.yml                                                          #
+# Builds the FastAPI backend + MCP server Docker images and deploys them      #
+# to Azure Container Apps on every push to main (or develop PR merge).        #
+# =========================================================================== #
+name: Deploy Backend to Azure Container Apps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+
+env:
+  # ── Resource identifiers ───────────────────────────────────────────────────
+  AZURE_RESOURCE_GROUP: ai103-production
+  ACR_NAME: ai103registry
+  CONTAINER_ENV: ai103-env
+  BACKEND_APP: ai103-backend
+  MCP_APP: ai103-mcp
+  AZURE_LOCATION: koreacentral
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # Required for OIDC login
+      contents: read
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Login to Azure via OIDC (no stored passwords!) ────────────────────
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # ── 3. Login to Azure Container Registry ─────────────────────────────────
+      - name: Login to ACR
+        run: az acr login --name ${{ env.ACR_NAME }}
+
+      # ── 4. Build & push Backend image ────────────────────────────────────────
+      - name: Build & push backend image
+        working-directory: backend
+        run: |
+          docker build \
+            -f Dockerfile \
+            -t ${{ env.ACR_NAME }}.azurecr.io/ai103-backend:${{ github.sha }} \
+            -t ${{ env.ACR_NAME }}.azurecr.io/ai103-backend:latest \
+            .
+          docker push ${{ env.ACR_NAME }}.azurecr.io/ai103-backend:${{ github.sha }}
+          docker push ${{ env.ACR_NAME }}.azurecr.io/ai103-backend:latest
+
+      # ── 5. Build & push MCP Server image ─────────────────────────────────────
+      - name: Build & push MCP server image
+        working-directory: backend
+        run: |
+          docker build \
+            -f Dockerfile.mcp \
+            -t ${{ env.ACR_NAME }}.azurecr.io/ai103-mcp:${{ github.sha }} \
+            -t ${{ env.ACR_NAME }}.azurecr.io/ai103-mcp:latest \
+            .
+          docker push ${{ env.ACR_NAME }}.azurecr.io/ai103-mcp:${{ github.sha }}
+          docker push ${{ env.ACR_NAME }}.azurecr.io/ai103-mcp:latest
+
+      # ── 6. Deploy Backend Container App ──────────────────────────────────────
+      - name: Deploy backend to Container Apps
+        run: |
+          az containerapp update \
+            --name ${{ env.BACKEND_APP }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/ai103-backend:${{ github.sha }}
+
+      # ── 7. Deploy MCP Server Container App ───────────────────────────────────
+      - name: Deploy MCP server to Container Apps
+        run: |
+          az containerapp update \
+            --name ${{ env.MCP_APP }} \
+            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/ai103-mcp:${{ github.sha }}
