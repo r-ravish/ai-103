@@ -94,8 +94,7 @@ export default function AdminEmployeesTab() {
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. John Doe"
-                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] pl-9 pr-3 py-2 text-sm text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)] transition-colors"
+                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] pl-9 pr-3 py-2 text-sm text-[var(--color-ink)] focus:outline-none focus:border-[var(--color-seal)] transition-colors"
                 required
               />
             </div>
@@ -109,8 +108,7 @@ export default function AdminEmployeesTab() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="employee@company.com"
-              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] px-3 py-2 text-sm text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)] transition-colors"
+              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] px-3 py-2 text-sm text-[var(--color-ink)] focus:outline-none focus:border-[var(--color-seal)] transition-colors"
               required
             />
           </div>
@@ -123,9 +121,8 @@ export default function AdminEmployeesTab() {
               type="text"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Minimum 8 characters"
               minLength={8}
-              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] px-3 py-2 text-sm text-[var(--color-ink)] placeholder-[var(--color-muted)] focus:outline-none focus:border-[var(--color-seal)] transition-colors"
+              className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-canvas)] px-3 py-2 text-sm text-[var(--color-ink)] focus:outline-none focus:border-[var(--color-seal)] transition-colors"
               required
             />
           </div>
