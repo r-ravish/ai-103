@@ -37,9 +37,9 @@ jobs:
       - name: Azure Login
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          client-id: "49c28cb9-57af-4111-b17f-19345d82ffdb"
+          tenant-id: "69cb8230-07dd-45ab-9ae8-0e620cf722d5"
+          subscription-id: "bab43538-88c5-4596-8c3c-b1ff30893f08"
 
       # ── 3. Login to Azure Container Registry ─────────────────────────────────
       - name: Login to ACR
