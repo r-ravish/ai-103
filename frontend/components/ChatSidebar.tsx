@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageSquare, Plus, Loader2 } from "lucide-react";
-import { fetchConversations } from "@/lib/api";
+import { MessageSquare, Plus, Loader2, Trash2 } from "lucide-react";
+import { fetchConversations, deleteConversation } from "@/lib/api";
 import { Conversation } from "@/types/chat";
 import { useAuth } from "@/lib/auth-context";
 
@@ -39,6 +39,20 @@ export default function ChatSidebar({ onSelectConversation, onNewChat, updateTri
     return () => { cancelled = true; };
   }, [user, updateTrigger]);
 
+  const handleDelete = async (e: React.MouseEvent, id: number) => {
+    e.stopPropagation();
+    if (confirm("Are you sure you want to delete this chat?")) {
+      try {
+        await deleteConversation(id);
+        setConversations(prev => prev.filter(c => c.id !== id));
+        onNewChat();
+      } catch (err) {
+        console.error("Failed to delete conversation", err);
+        alert("Failed to delete chat.");
+      }
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -68,13 +82,20 @@ export default function ChatSidebar({ onSelectConversation, onNewChat, updateTri
         ) : (
           <ul className="space-y-1">
             {conversations.map((conv) => (
-              <li key={conv.id}>
+              <li key={conv.id} className="group relative">
                 <button
                   onClick={() => onSelectConversation(conv.id)}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-[var(--color-ink-soft)] hover:bg-[var(--color-canvas)] hover:text-[var(--color-ink)] transition-colors"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 pr-8 text-left text-[13px] text-[var(--color-ink-soft)] hover:bg-[var(--color-canvas)] hover:text-[var(--color-ink)] transition-colors"
                 >
                   <MessageSquare className="h-3.5 w-3.5 shrink-0 text-[var(--color-muted)]" />
                   <span className="truncate">{conv.title || "New conversation"}</span>
+                </button>
+                <button
+                  onClick={(e) => handleDelete(e, conv.id)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--color-muted)] opacity-0 hover:text-red-500 group-hover:opacity-100 transition-all cursor-pointer"
+                  title="Delete chat"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </li>
             ))}
