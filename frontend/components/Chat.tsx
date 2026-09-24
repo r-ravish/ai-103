@@ -27,7 +27,7 @@ interface ChatProps {
   onChatUpdated?: () => void;
 }
 
-const Chat = forwardRef<ChatHandle>(function Chat({ onChatUpdated }: ChatProps, ref) {
+const Chat = forwardRef<ChatHandle, ChatProps>(function Chat({ onChatUpdated }, ref) {
   const { user, refreshUser } = useAuth();
   const { messages, setMessages, conversationId, setConversationId, isHydrated, clearSession } = useChatSession();
   const [isLoading, setIsLoading] = useState(false);
