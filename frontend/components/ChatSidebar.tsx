@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MessageSquare, Plus, Loader2, Trash2 } from "lucide-react";
+import { MessageSquare, Plus, Loader2, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { fetchConversations, deleteConversation } from "@/lib/api";
 import { Conversation } from "@/types/chat";
 import { useAuth } from "@/lib/auth-context";
@@ -16,10 +16,11 @@ export default function ChatSidebar({ onSelectConversation, onNewChat, updateTri
   const { user } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
-    if (!user) {
-      setConversations([]);
+    if (!user || !isOpen) {
+      if (!user) setConversations([]);
       return;
     }
 
@@ -37,7 +38,7 @@ export default function ChatSidebar({ onSelectConversation, onNewChat, updateTri
     }
     load();
     return () => { cancelled = true; };
-  }, [user, updateTrigger]);
+  }, [user, updateTrigger, isOpen]);
 
   const handleDelete = async (e: React.MouseEvent, id: number) => {
     e.stopPropagation();
@@ -55,8 +56,37 @@ export default function ChatSidebar({ onSelectConversation, onNewChat, updateTri
 
   if (!user) return null;
 
+  if (!isOpen) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        className="absolute left-0 top-1/2 -translate-y-1/2 bg-[var(--color-paper)] border border-[var(--color-border)] border-l-0 rounded-r-xl p-2 shadow-sm text-[var(--color-ink)] hover:bg-[var(--color-canvas)] transition-colors z-10 cursor-pointer"
+        title="Open Chat History"
+      >
+        <div className="flex flex-col items-center gap-2">
+          <MessageSquare className="w-5 h-5 text-[var(--color-seal)]" />
+          <span className="text-xs font-semibold" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>Chat History</span>
+          <ChevronRight className="w-4 h-4 text-[var(--color-muted)]" />
+        </div>
+      </button>
+    );
+  }
+
   return (
-    <div className="w-64 border-r border-[var(--color-border)] bg-[var(--color-paper)] flex flex-col h-full shrink-0 transition-all">
+    <div className="w-64 border-r border-[var(--color-border)] bg-[var(--color-paper)] flex flex-col h-full shadow-[8px_0_24px_rgba(0,0,0,0.12)] transition-transform z-20 absolute left-0 top-0 animate-in slide-in-from-left-8 duration-300">
+      <div className="p-4 border-b border-[var(--color-border)] flex items-center justify-between sticky top-0 bg-[var(--color-paper)] z-10">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="w-4 h-4 text-[var(--color-seal)]" />
+          <h2 className="text-sm font-semibold text-[var(--color-ink)]">Chat History</h2>
+        </div>
+        <button
+          onClick={() => setIsOpen(false)}
+          className="p-1 text-[var(--color-muted)] hover:bg-[var(--color-canvas)] rounded-md transition-colors cursor-pointer"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+      </div>
+
       <div className="p-3 border-b border-[var(--color-border)]">
         <button
           onClick={onNewChat}
